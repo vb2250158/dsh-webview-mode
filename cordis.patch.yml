@@ -1,0 +1,3 @@
+- insert:
+    - id: webview-mode
+      name: dsh-webview-mode
