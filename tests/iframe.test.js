@@ -21,7 +21,8 @@ test('iframe navigation persists the displayed URL and rejects script URLs witho
   factory(name => name === 'react' ? React : { createPortal() {} })
   const initial = { version: 1, sessionId: 'test', revision: 0, active: null, tabs: [] }
   const service = { read: async () => ({ ok: true, value: initial }), write: async value => { writes.push(value); return { ok: true, value: { ...value, revision: value.revision + 1 } } } }
-  const render = () => { cursor = 0; return context.TestPanel({ sessionId: 'test', service, close() {} }) }
+  let command
+  const render = () => { cursor = 0; return context.TestPanel({ sessionId: 'test', service, close() {}, ready(value) { command = value } }) }
   const find = (node, predicate) => { if (!node || typeof node !== 'object') return; if (predicate(node)) return node; for (const child of node.children || []) { const found = find(child, predicate); if (found) return found } }
   const settle = () => new Promise(resolve => setImmediate(resolve))
   render(); effects.splice(0).forEach(effect => effect()); await settle()
@@ -47,6 +48,12 @@ test('iframe navigation persists the displayed URL and rejects script URLs witho
   tree = render()
   assert.equal(writes.at(-1).tabs.length, 2)
   assert.equal(writes.at(-1).tabs.filter(tab => tab.url === 'https://example.com/video').length, 1)
+  await Promise.all([
+    command({ action: 'new', url: 'https://example.com/chat', reuse: true }),
+    command({ action: 'new', url: 'https://example.com/chat', reuse: true }),
+  ])
+  assert.equal(writes.at(-1).tabs.length, 3)
+  assert.equal(writes.at(-1).tabs.find(tab => tab.id === writes.at(-1).active).url, 'https://example.com/chat')
   const beforeInvalid = writes.length
 
   tree = await navigate('javascript:alert(1)')

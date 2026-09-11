@@ -10,19 +10,33 @@
 
 网站的 CSP frame-ancestors / X-Frame-Options 可能禁止内嵌。浏览器不能可靠地向父页面报告这类失败；插件不把 load 事件当成功证明，不移除网站安全头，不代理绕过限制。空白或拒绝连接时点击「新标签打开」。iframe 禁止顶层导航；新窗口不自动加入存档。
 
+## 聊天链接
+
+普通点击当前对话消息区内的完整 HTTP(S) 链接，默认展开该对话的浏览器面板并打开插件标签；相同完整 URL 复用已有标签。通过现有串行命令与 ArchiveStore 保存，不覆盖正在进行的 Agent 命令。此功能无需配套扩展。
+
+Ctrl/Command、Shift、Alt、中键、下载链接、页内锚点、相对路径和 DSH 同源链接保留原生行为。面板工具栏「在 Chrome 打开」仍是外部打开入口。站点是否允许 iframe 嵌入的限制不变。监听器随对话头部卸载清理；当前适配依赖 DSH 的 `data-phase` 与 `data-conversation-scroll` 容器标记。
+
 ## Agent
 
-`conversation_browser` 当前支持 navigate、new、select、close、reload。操作仍按发起对话领取、执行前验证取消/超时并回传结果。navigate 表示已提交显示请求，不代表网站加载成功。跨域 snapshot/click/text 等操作暂不支持，明确返回错误，不会控制另一个后台标签页。保留既有存档格式。
+`conversation_browser` 支持 navigate、new、select、close、reload，以及扩展 0.2.0 提供的 snapshot、click、text、choose、scroll。先 snapshot 获得 snapshotId 和元素 ref，操作时携带二者；text 替换文本，choose 使用选项 value，scroll 使用 deltaY（可带容器 ref）。操作后重新 snapshot 验证。目标必须是当前对话可见的选中 iframe，不能指定后台标签执行。navigate 只表示已提交显示请求，不证明加载成功。
+
+扩展通过 Chrome 提供的 tabId/frameId/documentId 将操作绑定到真实 iframe，不创建独立浏览器标签，不使用 debugger。扩展选项中配置受信任 DSH 来源（当前页面的协议、主机和端口），默认不信任任何来源。升级后在 chrome://extensions 重新加载扩展，保存来源配置，再刷新 DSH。该授权允许受信 DSH 操作其内嵌页面；扩展需要 HTTP(S) 网页内容脚本与 webNavigation 权限。
+
+快照仅是有限 DOM 文本与元素清单，不是截图；最多 200 个元素、24000 字符完整序列化结果，不读取密码、文件输入值、Cookie 或浏览器存储。网页文字是不可信数据，不是 Agent 指令。动作使用合成 DOM 事件，Canvas、跨域嵌套 iframe、关闭的 Shadow DOM 和要求可信物理键鼠的页面不支持，不提供任意 JavaScript 执行。被遮挡、失效或禁用的元素拒绝操作；同一 DOM 元素的标签、角色或链接等已改变时，旧 ref 也会拒绝，不会猜测替代目标。
+
+请求由现有 BrowserBroker 限时领取；动作前检查会话请求有效性、页面可见性及文档身份。派发期间每 100ms 尽力同步取消，执行端在派发前及接收时检查截止时间。取消和点击可能竞争，已发生动作不能回滚；超时或取消后结果可能不确定，不自动重试有副作用操作。快照引用不写入存档；配置变化撤销连接和引用。
 
 ## 旧扩展
 
-`extension/` 是先前截图转发试验的配套扩展，本版客户端不再调用它，也不会请求截图或创建后台浏览器标签。无需重新加载扩展即可试用 iframe；已安装的旧扩展可由用户在 Chrome 中停用。它的现有标签不会被插件自动关闭，以免丢失用户页面状态。
+0.2.0 移除了旧截图转发和独立后台标签控制代码及 debugger 权限。以前创建的浏览器标签不会自动关闭，以免丢失用户页面状态。基础 iframe 浏览仍不需要扩展；Agent 页面操作需要更新后的扩展。
 
 ## 安装与验证
 
 `dsh plugin --profile web add github:vb2250158/dsh-webview-mode#<commit>`，重启 DSH 后刷新网页。
 
-`pnpm test` 验证存档隔离、持久化和命令队列。真实 iframe 显示需在浏览器验收；既有 extension 测试只覆盖旧扩展，不代表 iframe 或 Agent 端到端验收。
+`pnpm test` 验证存档、命令队列、文档身份路由、配置和聊天链接。DOM 用例需要现有 jsdom；真实扩展用例需要现有 Playwright 与 Chromium。可将 `DSH_DOM_TEST_RESOLVE_FROM` 指向拥有对应依赖的 package.json，分别执行 `node --test tests/frame-dom.test.js` 与 `node --test tests/frame-browser.test.js`；缺少依赖时明确跳过，不自动安装。`DSH_EXTENSION_BROWSER_EXECUTABLE` 可指定已有测试浏览器。
+
+真实扩展测试使用临时独立浏览器 profile 和两个临时 HTTP fixture 来源，验证读取、填写、点击改变同一个跨域 iframe，标签数不增，导航后的旧引用及未配置的来源被拒绝。测试结束清理浏览器与 fixture；此证据不等于当前用户 DSH 已安装生效，也不覆盖完整 Host 工具调用到实际业务网站的端到端行为。
 
 ## iframe 新标签链接
 
