@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>DSH 浏览器连接设置</title>
+<h1>允许 Agent 操作的 DSH 来源</h1>
+<p>每行填写一个 DSH 地址来源（协议、主机和端口，不含路径）。仅添加你信任的 DSH 实例；该页面可以操作其中内嵌的网页。保存后刷新 DSH。</p>
+<form id="settings">
+<label for="origins">DSH 来源</label><br>
+<textarea id="origins" rows="6" cols="60" required></textarea><br>
+<button type="submit">保存</button>
+<p id="status" role="status"></p>
+</form>
+<script src="options.js"></script>
+</html>
