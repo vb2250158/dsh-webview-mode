@@ -3,7 +3,7 @@ if (window !== window.top && window.parent === window.top) {
   let controller = createFrameDomController()
   let nonce = null
   let epoch = 0
-  chrome.storage.onChanged.addListener(() => { nonce = null; epoch++; controller = createFrameDomController() })
+  chrome.storage.onChanged.addListener(() => { nonce = null; setFrameEventBinding(null); epoch++; controller = createFrameDomController() })
   window.addEventListener('message', async event => {
     if (event.source !== window.parent || event.origin !== location.ancestorOrigins?.[0] || event.data?.source !== 'dsh-frame-bind') return
     const generation = epoch
@@ -14,6 +14,7 @@ if (window !== window.top && window.parent === window.top) {
       const result = await chrome.runtime.sendMessage({ kind: 'bind-frame', nonce: candidate })
       if (generation === epoch && result?.value?.connected) {
         nonce = candidate
+        setFrameEventBinding(candidate)
         window.parent.postMessage({ source: 'dsh-frame-ready', nonce }, event.origin)
       }
     } catch { /* Extension reload invalidates this document; the pending DSH request expires explicitly. */ }

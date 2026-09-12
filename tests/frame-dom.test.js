@@ -24,8 +24,8 @@ function fixture(html) {
 }
 const check = (name, fn) => test(name, { skip: !JSDOM && 'jsdom unavailable; set DSH_DOM_TEST_RESOLVE_FROM to an existing workspace package.json' }, fn)
 
-check('snapshot is bounded and excludes input values, sensitive inputs and hidden text', t => {
-  const f = fixture('<title>Title</title><p>Hello</p><input value="SECRET"><input type="password" value="PASSWORD"><textarea>DEFAULT SECRET</textarea><div hidden>HIDDEN</div><script>SECRET SCRIPT</script>' + '<button>Action</button>'.repeat(220))
+check('snapshot is bounded and excludes sensitive inputs and hidden text', t => {
+  const f = fixture('<title>Title</title><p>Hello</p><input value="Visible"><input type="password" value="PASSWORD"><textarea>Visible default</textarea><div hidden>HIDDEN</div><script>SECRET SCRIPT</script>' + '<button>Action</button>'.repeat(220))
   t.after(f.close)
   const s = f.execute({ action: 'snapshot' })
   assert.equal(s.url, 'https://site.example/page')
@@ -35,6 +35,71 @@ check('snapshot is bounded and excludes input values, sensitive inputs and hidde
   assert.doesNotMatch(JSON.stringify(s), /SECRET|PASSWORD|HIDDEN/)
   f.doc.body.innerHTML = '<select>' + ('<option value="' + 'x'.repeat(2000) + '">' + 'y'.repeat(2000) + '</option>').repeat(20) + '</select><p>' + '"\\'.repeat(30000) + '</p>'
   assert.ok(JSON.stringify(f.execute({ action: 'snapshot' })).length <= 24000)
+})
+
+check('associated labels identify controls and snapshots verify current writes and selections', t => {
+  const f = fixture('<label for="field">Account</label><input id="field" value="initial"><label>Biography<textarea>default</textarea></label><label><input type="checkbox" checked>Enabled</label><input type="radio"><select><option value="a">A</option><option value="b" label="Bee">B</option></select>'); t.after(f.close)
+  let s = f.execute({ action: 'snapshot' })
+  assert.equal(s.elements[0].name, 'Account')
+  assert.equal(s.elements[0].type, 'text')
+  assert.equal(s.elements[0].value, 'initial')
+  assert.equal(s.elements[1].name, 'Biography')
+  assert.equal(s.elements[2].checked, true)
+  assert.equal(s.elements[3].checked, false)
+  f.execute({ action: 'text', snapshotId: s.snapshotId, ref: 1, text: 'written' })
+  f.execute({ action: 'text', snapshotId: s.snapshotId, ref: 2, text: 'current\ntext' })
+  f.execute({ action: 'choose', snapshotId: s.snapshotId, ref: 5, value: 'b' })
+  s = f.execute({ action: 'snapshot' })
+  assert.equal(s.elements[0].value, 'written')
+  assert.equal(s.elements[1].value, 'current\ntext')
+  assert.equal(s.elements[4].options[0].selected, false)
+  assert.equal(s.elements[4].options[1].selected, true)
+  assert.equal(s.elements[4].options[1].name, 'Bee')
+  f.execute({ action: 'click', snapshotId: s.snapshotId, ref: 3 })
+  s = f.execute({ action: 'snapshot' })
+  assert.equal(s.elements[2].checked, false)
+  f.doc.querySelector('label').textContent = 'Different account'
+  assert.throws(() => f.execute({ action: 'text', snapshotId: s.snapshotId, ref: 1, text: 'no' }), /changed/)
+})
+
+check('values use an allowlist and password/file controls are never read or referenced', t => {
+  const f = fixture('<input type="password" aria-label="PRIVATE PASSWORD"><input type="file" title="PRIVATE FILE"><input type="hidden" value="PRIVATE HIDDEN"><input type="number" value="123"><input type="checkbox" value="PRIVATE CHECK"><input type="text"><textarea></textarea>'); t.after(f.close)
+  for (const input of f.doc.querySelectorAll('input[type="password"],input[type="file"]')) Object.defineProperty(input, 'value', { get() { throw Error('sensitive value read') } })
+  f.doc.querySelector('input[type="text"]').value = '"\\'.repeat(10000)
+  f.doc.querySelector('textarea').value = '"\\'.repeat(10000)
+  const s = f.execute({ action: 'snapshot' })
+  assert.doesNotMatch(JSON.stringify(s), /PRIVATE|password|file/)
+  assert.ok(s.elements.every(item => !['hidden', 'number', 'checkbox'].includes(item.type) || !Object.hasOwn(item, 'value')))
+  assert.ok(s.elements.every(item => item.value === undefined || item.value.length <= 10000))
+  assert.ok(JSON.stringify(s).length <= 24000)
+  for (const type of ['text', 'search', 'email', 'url', 'tel']) {
+    f.doc.body.innerHTML = `<input type="${type}" value="visible">`
+    assert.equal(f.execute({ action: 'snapshot' }).elements[0].value, 'visible')
+  }
+})
+
+check('resolved destinations and option definitions invalidate stale refs', t => {
+  const f = fixture('<base href="https://site.example/one/"><a href="next">Next</a><form action="submit"><button>Submit</button></form><select><option value="a">A</option><option value="b">B</option></select>'); t.after(f.close)
+  let s = f.execute({ action: 'snapshot' })
+  assert.equal(s.elements[0].href, 'https://site.example/one/next')
+  f.doc.querySelector('base').href = 'https://site.example/two/'
+  for (const ref of [1, 2]) assert.throws(() => f.execute({ action: 'click', snapshotId: s.snapshotId, ref }), /changed/)
+  s = f.execute({ action: 'snapshot' })
+  f.doc.querySelector('form').action = '/different'
+  assert.throws(() => f.execute({ action: 'click', snapshotId: s.snapshotId, ref: 2 }), /changed/)
+  const option = f.doc.querySelectorAll('option')[1]
+  for (const mutate of [() => { option.value = 'c' }, () => { option.label = 'Changed' }, () => { option.disabled = true }, () => { option.remove() }]) {
+    s = f.execute({ action: 'snapshot' })
+    mutate()
+    assert.throws(() => f.execute({ action: 'choose', snapshotId: s.snapshotId, ref: 3, value: 'a' }), /changed/)
+  }
+})
+
+check('href metadata omits unsafe, credential-bearing and oversized URLs', t => {
+  const f = fixture('<a href="/ok">OK</a><a href="javascript:void(0)">Script</a><a href="https://user:fake@example.com/">Credentials</a><a href="/' + 'x'.repeat(2001) + '">Long</a>'); t.after(f.close)
+  const s = f.execute({ action: 'snapshot' })
+  assert.equal(s.elements[0].href, 'https://site.example/ok')
+  for (const item of s.elements.slice(1)) assert.equal(Object.hasOwn(item, 'href'), false)
 })
 
 check('refs expire on new snapshots, URL changes and unavailable nodes', t => {

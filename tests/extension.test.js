@@ -12,7 +12,7 @@ test('commands target the exact registered iframe document, never a new browser 
     storage: { sync: { get: async () => ({ trustedOrigins: ['https://dsh.example'] }) }, onChanged: { addListener(fn) { changed = fn } } },
     webNavigation: { getFrame: async ({ frameId }) => frameId === 0 ? top : frame },
     tabs: { onRemoved: { addListener(fn) { removed = fn } }, sendMessage: async (...args) => { sent.push(args); return { value: { content: 'actual iframe' } } } },
-    runtime: { onMessage: { addListener(fn) { listener = fn } } },
+    runtime: { getManifest: () => ({ version: '0.2.1' }), onMessage: { addListener(fn) { listener = fn } } },
   }
   runInNewContext(await readFile(new URL('../extension/worker.js', import.meta.url), 'utf8'), { chrome, URL, Date })
   const parent = { tab: { id: 1 }, frameId: 0, documentId: 'top', url: top.url }
@@ -20,6 +20,10 @@ test('commands target the exact registered iframe document, never a new browser 
   const nonce = '12345678-1234-1234-1234-123456789abc'
   const deadline = Date.now() + 10000
   const call = (kind, sender = parent, extra = {}) => new Promise(resolve => listener({ kind, nonce, deadline, ...extra }, sender, resolve))
+  assert.equal((await call('status')).value.configured, true)
+  assert.equal((await call('status')).value.version, '0.2.1')
+  assert.equal(sent.length, 0, 'status never binds or dispatches to a frame')
+  assert.match((await call('status', child)).error, /Only the current DSH/)
   assert.match((await call('bind-frame', child)).error, /challenge/)
   assert.equal((await call('prepare-frame')).value.prepared, true)
   assert.equal((await call('bind-frame', child)).value.connected, true)
@@ -39,7 +43,9 @@ test('commands target the exact registered iframe document, never a new browser 
   frame.parentFrameId = 0
   await call('prepare-frame')
   await call('bind-frame', { ...child, documentId: 'replacement' })
+  assert.equal((await call('binding-status')).value.connected, true)
   changed()
+  assert.equal((await call('binding-status')).value.connected, false)
   assert.match((await call('frame-command')).error, /not connected/)
   // Hold the final frame lookup so cancellation wins before dispatch.
   await call('prepare-frame')
@@ -73,6 +79,14 @@ test('commands target the exact registered iframe document, never a new browser 
   bindingRelease()
   assert.match((await binding).error, /settings changed/)
   assert.match((await call('frame-command')).error, /not connected/)
+  chrome.webNavigation.getFrame = async ({ frameId }) => frameId === 0 ? top : frame
+  await call('prepare-frame')
+  await call('bind-frame', { ...child, documentId: 'replacement' })
+  const delivered = await call('frame-event', { ...child, documentId: 'replacement' }, { event: { type: 'location', url: 'https://fake.example/', title: 'Page title' } })
+  assert.equal(delivered.error, undefined)
+  assert.equal(sent.at(-1)[1].event.url, frame.url, 'Chrome owns the reported location')
+  assert.equal(sent.at(-1)[2].documentId, 'top')
+  assert.match((await call('frame-event', child, { event: { type: 'link', url: 'https://page.example/' } })).error, /Unbound/)
   removed(1)
-  assert.equal(sent.length, 1)
+  assert.equal(sent.length, 2)
 })

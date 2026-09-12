@@ -15,7 +15,7 @@ test('iframe navigation persists the displayed URL and rejects script URLs witho
     useSyncExternalStore: () => null,
   }
   const handlers = {}
-  const context = { window: { addEventListener(name, listener) { handlers[name] = listener }, removeEventListener() {}, __ModuleLoader__: { load(value) { factory = value.factory } } }, URL, crypto: webcrypto, location: { origin: 'http://127.0.0.1:3180' } }
+  const context = { setInterval: () => 1, clearInterval() {}, window: { addEventListener(name, listener) { handlers[name] = listener }, removeEventListener() {}, __ModuleLoader__: { load(value) { factory = value.factory } } }, URL, crypto: webcrypto, location: { origin: 'http://127.0.0.1:3180' } }
   const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')).replace('function Panel(', 'globalThis.TestPanel = function Panel(')
   runInNewContext(source, context)
   factory(name => name === 'react' ? React : { createPortal() {} })
@@ -46,13 +46,20 @@ test('iframe navigation persists the displayed URL and rejects script URLs witho
   handlers.message({ source: sourceWindow, data: { source: 'dsh-iframe-link', url: 'https://example.com/video' } })
   await settle()
   tree = render()
-  assert.equal(writes.at(-1).tabs.length, 2)
-  assert.equal(writes.at(-1).tabs.filter(tab => tab.url === 'https://example.com/video').length, 1)
+  assert.equal(writes.at(-1).tabs.length, 1, 'page-owned legacy messages cannot create tabs')
+  assert.equal(writes.at(-1).tabs.filter(tab => tab.url === 'https://example.com/video').length, 0)
   await Promise.all([
     command({ action: 'new', url: 'https://example.com/chat', reuse: true }),
     command({ action: 'new', url: 'https://example.com/chat', reuse: true }),
   ])
-  assert.equal(writes.at(-1).tabs.length, 3)
+  assert.equal(writes.at(-1).tabs.length, 2)
+  tree = render()
+  const collectFrames = node => !node || typeof node !== 'object' ? [] : [...(node.type === 'iframe' ? [node] : []), ...(node.children || []).flatMap(collectFrames)]
+  const beforeReload = collectFrames(tree)
+  await command({ action: 'reload' })
+  const afterReload = collectFrames(render())
+  assert.equal(afterReload[0].props.key, beforeReload[0].props.key, 'reload preserves background iframe identity')
+  assert.notEqual(afterReload[1].props.key, beforeReload[1].props.key, 'reload replaces selected iframe only')
   assert.equal(writes.at(-1).tabs.find(tab => tab.id === writes.at(-1).active).url, 'https://example.com/chat')
   const beforeInvalid = writes.length
 

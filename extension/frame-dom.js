@@ -37,8 +37,28 @@ function createFrameDomController() {
   function role(element) {
     return element.getAttribute('role') || ({ A: 'link', BUTTON: 'button', SELECT: 'combobox', TEXTAREA: 'textbox', INPUT: 'input' }[element.tagName]) || (element.isContentEditable ? 'textbox' : 'element')
   }
+  function associatedLabel(element) {
+    let text = ''
+    for (const label of element.labels || []) {
+      text += (text ? ' ' : '') + pageText(label, 500 - text.length)
+      if (text.length >= 500) break
+    }
+    return text.slice(0, 500).trim()
+  }
+  function resolvedUrl(value) {
+    try { return new URL(value, document.baseURI).href }
+    catch { return null } // Invalid page URLs cannot provide a resolved destination.
+  }
+  function linkDestination(element) {
+    const link = element.closest('a[href]')
+    return link ? resolvedUrl(link.getAttribute('href')) : null
+  }
   function semantics(element) {
-    return JSON.stringify([element.tagName, element.getAttribute('type'), element.getAttribute('role'), element.getAttribute('aria-label'), element.getAttribute('title'), element.getAttribute('href'), element.getAttribute('target'), element.getAttribute('formaction'), element.getAttribute('name'), pageText(element, 500)])
+    const link = element.closest('a[href]')
+    const form = element.form
+    // Editable values and selection state are observations, not target identity.
+    const options = element instanceof HTMLSelectElement ? Array.from(element.options, option => [option.value, option.label, option.disabled, option.parentElement?.disabled === true]) : null
+    return JSON.stringify([element.tagName, element.getAttribute('type'), element.getAttribute('role'), element.getAttribute('aria-label'), element.getAttribute('title'), associatedLabel(element), element.getAttribute('href'), linkDestination(element), link?.getAttribute('target'), document.querySelector('base[target]')?.getAttribute('target'), link?.hasAttribute('download'), element.getAttribute('formaction'), form ? resolvedUrl((element.hasAttribute('formaction') ? element.getAttribute('formaction') : form.getAttribute('action')) || document.URL) : null, form?.method, form?.target, element.getAttribute('formmethod'), element.getAttribute('formtarget'), element.getAttribute('name'), element.multiple, options, pageText(element, 500)])
   }
   function snapshot() {
     refs = new Map()
@@ -53,13 +73,24 @@ function createFrameDomController() {
     for (const element of document.querySelectorAll('a[href],button,input,textarea,select,[contenteditable],[role],[tabindex]')) {
       if (result.elements.length >= 200) break
       if (!available(element) || sensitive(element)) continue
-      const item = { ref: result.elements.length + 1, role: role(element).slice(0, 100), name: (element.getAttribute('aria-label') || element.getAttribute('title') || pageText(element, 500)).slice(0, 500) }
+      const item = { ref: result.elements.length + 1, role: role(element).slice(0, 100), name: (element.getAttribute('aria-label') || associatedLabel(element) || element.getAttribute('title') || pageText(element, 500)).slice(0, 500) }
+      if (element instanceof HTMLInputElement) {
+        item.type = element.type.slice(0, 100)
+        if (['checkbox', 'radio'].includes(element.type)) item.checked = element.checked
+        if (textTypes.has(element.type)) item.value = element.value.slice(0, 10000)
+      } else if (element instanceof HTMLTextAreaElement) item.value = element.value.slice(0, 10000)
+      const href = linkDestination(element)
+      if (href) {
+        const url = new URL(href)
+        if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && href.length <= 2000) item.href = href
+      }
       if (element instanceof HTMLSelectElement) item.options = []
       result.elements.push(item)
       if (size() > 24000) { result.elements.pop(); break }
       if (element instanceof HTMLSelectElement) {
         for (const option of element.options) {
-          const entry = { value: option.value, name: option.textContent || '', disabled: option.disabled || option.parentElement?.disabled === true }
+          if (item.options.length >= 200 || option.value.length > 10000) break
+          const entry = { value: option.value, name: option.label.slice(0, 500), disabled: option.disabled || option.parentElement?.disabled === true, selected: option.selected }
           item.options.push(entry)
           if (size() > 24000) { item.options.pop(); break }
         }

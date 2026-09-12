@@ -43,7 +43,7 @@ test('real extension commands operate only the bound visible iframe document', {
   })
   const topOrigin = await serve(t, (_request, response) => {
     response.setHeader('Content-Type', 'text/html')
-    response.end(`<!doctype html><title>Top fixture</title><iframe style="width:700px;height:400px" src="${childOrigin}/frame"></iframe>`)
+    response.end(`<!doctype html><title>Top fixture</title><iframe sandbox="allow-scripts allow-same-origin allow-forms" style="width:700px;height:400px" src="${childOrigin}/frame"></iframe>`)
   })
   const profile = await mkdtemp(join(tmpdir(), 'dsh-frame-browser-'))
   let context
@@ -62,6 +62,9 @@ test('real extension commands operate only the bound visible iframe document', {
   const page = context.pages()[0] || await context.newPage()
   await page.goto(topOrigin, { waitUntil: 'load' })
   await page.addScriptTag({ content: helpers })
+  const capabilities = await page.evaluate(() => extensionRequest({ kind: 'status' }, Date.now() + 10000))
+  assert.equal(capabilities.configured, true)
+  assert.equal(capabilities.version, '0.2.1')
   const initialTabs = context.pages().length
   const command = action => page.evaluate(async action => {
     const nonce = crypto.randomUUID(), deadline = Date.now() + 10000
@@ -80,6 +83,7 @@ test('real extension commands operate only the bound visible iframe document', {
   assert.ok(frame)
   assert.equal(await frame.locator('input').inputValue(), 'real extension input')
   snapshot = await command({ action: 'snapshot' })
+  assert.equal(snapshot.elements.find(element => element.name === 'Text').value, 'real extension input')
   const button = snapshot.elements.find(element => element.name.trim() === 'Click me')
   assert.ok(button)
   await command({ action: 'click', snapshotId: snapshot.snapshotId, ref: button.ref })
@@ -93,6 +97,8 @@ test('real extension commands operate only the bound visible iframe document', {
   // The non-configured origin has the top bridge too, but must never receive a response.
   await page.goto(`${childOrigin}/untrusted`, { waitUntil: 'load' })
   await page.addScriptTag({ content: helpers })
+  const unconfigured = await page.evaluate(() => extensionRequest({ kind: 'status' }, Date.now() + 10000))
+  assert.equal(unconfigured.configured, false)
   const rejected = await page.evaluate(async () => {
     const deadline = Date.now() + 1000
     try { await extensionRequest({ kind: 'prepare-frame', nonce: crypto.randomUUID(), deadline }, deadline); return false }
