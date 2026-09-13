@@ -11,8 +11,29 @@ if (window === window.top) {
     const id = event.data.id
     const kind = event.data.request?.kind
     const reply = value => window.postMessage({ source: 'dsh-webview-bridge', id, ...value }, location.origin)
-    const forward = () => chrome.runtime.sendMessage(event.data.request).then(reply, error => reply({ error: error.message }))
-    const { trustedOrigins = [] } = await chrome.storage.sync.get('trustedOrigins')
+    // Reloading the extension orphans this very script: its chrome.* handles die with the old
+    // extension, every later call throws "Extension context invalidated", and the throw is
+    // unrecoverable from in here. Detect it before reading storage — note the storage listener
+    // above cannot help, because a dead context receives no storage events either — then tell
+    // the page it must reconnect instead of letting a bare exception reach the error overlay.
+    const lost = () => {
+      try { return !chrome.runtime?.id } catch { return true }
+    }
+    if (lost()) return reply({ error: 'Extension was reloaded; reconnect to the extension.' })
+    const forward = () => {
+      if (lost()) return reply({ error: 'Extension was reloaded; reconnect to the extension.' })
+      return chrome.runtime.sendMessage(event.data.request).then(reply, error => {
+        if (lost()) return reply({ error: 'Extension was reloaded; reconnect to the extension.' })
+        reply({ error: error.message })
+      })
+    }
+    let trustedOrigins = []
+    try {
+      ;({ trustedOrigins = [] } = await chrome.storage.sync.get('trustedOrigins'))
+    } catch {
+      // Reaching here means the context died between the check above and the read.
+      return reply({ error: 'Extension was reloaded; reconnect to the extension.' })
+    }
     if (trustedOrigins.includes(location.origin)) return forward()
     // An origin that is not authorized yet gets exactly two answers, and neither one
     // reads a page, a tab or archived data. The handshake lets the DSH settings page

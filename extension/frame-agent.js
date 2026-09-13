@@ -4,10 +4,21 @@ if (window !== window.top && window.parent === window.top) {
   let nonce = null
   let epoch = 0
   chrome.storage.onChanged.addListener(() => { nonce = null; setFrameEventBinding(null); epoch++; controller = createFrameDomController() })
+  // Reloading the extension orphans this script along with the top-level bridge: its chrome.*
+  // handles die with the old extension and every later call throws "Extension context
+  // invalidated", which nothing in here can recover from. Say so explicitly instead of
+  // letting the raw throw bubble into the page's error surface.
+  const lost = () => {
+    try { return !chrome.runtime?.id } catch { return true }
+  }
   window.addEventListener('message', async event => {
     if (event.source !== window.parent || event.origin !== location.ancestorOrigins?.[0] || event.data?.source !== 'dsh-frame-bind') return
+    if (lost()) return
     const generation = epoch
-    const { trustedOrigins = [] } = await chrome.storage.sync.get('trustedOrigins')
+    let trustedOrigins = []
+    try {
+      ;({ trustedOrigins = [] } = await chrome.storage.sync.get('trustedOrigins'))
+    } catch { return }
     if (!trustedOrigins.includes(event.origin)) return
     const candidate = event.data.nonce
     try {

@@ -64,7 +64,7 @@ test('real extension commands operate only the bound visible iframe document', {
   await page.addScriptTag({ content: helpers })
   const capabilities = await page.evaluate(() => extensionRequest({ kind: 'status' }, Date.now() + 10000))
   assert.equal(capabilities.configured, true)
-  assert.equal(capabilities.version, '0.2.1')
+  assert.equal(capabilities.version, '0.2.3')
   const initialTabs = context.pages().length
   const command = action => page.evaluate(async action => {
     const nonce = crypto.randomUUID(), deadline = Date.now() + 10000

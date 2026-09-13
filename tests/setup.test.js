@@ -13,7 +13,7 @@ test('the settings section reports the handshake and exposes the extension setup
     useEffect(effect) { const index = cursor++; if (!(index in hooks)) { hooks[index] = true; effects.push(effect) } },
   }
   const listeners = new Set()
-  const state = { respond: true, version: '0.2.2' }
+  const state = { respond: true, version: '0.2.3' }
   const window = {
     addEventListener(_name, fn) { listeners.add(fn) },
     removeEventListener(_name, fn) { listeners.delete(fn) },
@@ -85,7 +85,7 @@ test('the settings section reports the handshake and exposes the extension setup
   await settle()
   tree = render()
   const stale = find(tree, node => node.props.role === 'status')
-  assert.match(stale.children[0], /扩展为 0\.2\.1，需要 0\.2\.2/)
+  assert.match(stale.children[0], /扩展为 0\.2\.1，需要 0\.2\.3/)
   assert.doesNotMatch(stale.children[0], /尚未授权/)
   assert.deepEqual(kinds.at(-1), 'status')
 
@@ -99,4 +99,58 @@ test('the settings section reports the handshake and exposes the extension setup
   await button(tree, '复制扩展管理页地址').props.onClick()
   assert.deepEqual(copied.at(-1), 'chrome://extensions')
   assert.equal(button(tree, '复制扩展选项页地址').props.disabled, true, 'no id means no options link to offer')
+})
+
+test('the settings section asks for a page refresh when the extension was reloaded', async () => {
+  let factory, cursor = 0
+  const hooks = [], effects = [], listeners = new Set()
+  const React = {
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat() }),
+    useState(initial) { const index = cursor++; if (!(index in hooks)) hooks[index] = initial; return [hooks[index], value => { hooks[index] = typeof value === 'function' ? value(hooks[index]) : value }] },
+    useEffect(effect) { const index = cursor++; if (!(index in hooks)) { hooks[index] = true; effects.push(effect) } },
+  }
+  const window = {
+    addEventListener(_name, fn) { listeners.add(fn) },
+    removeEventListener(_name, fn) { listeners.delete(fn) },
+    postMessage(message) {
+      // This is what an orphaned content script now replies: it cannot reach the extension any
+      // more, and only a page refresh re-injects a live one.
+      queueMicrotask(() => {
+        for (const fn of [...listeners]) fn({
+          source: window, origin: 'https://dsh.example',
+          data: { source: 'dsh-webview-bridge', id: message.id, error: 'Extension was reloaded; reconnect to the extension.' },
+        })
+      })
+    },
+    __ModuleLoader__: { load(value) { factory = value.factory } },
+  }
+  const document = {
+    createElement: () => ({ value: '', setAttribute() {}, style: {}, select() {}, remove() {} }),
+    body: { append() {} }, execCommand: () => true,
+  }
+  const context = {
+    window, document, navigator: {}, location: { origin: 'https://dsh.example' },
+    crypto: webcrypto, setTimeout, clearTimeout, queueMicrotask, setInterval: () => 1, clearInterval() {},
+  }
+  const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
+    .replace('function Setup(', 'globalThis.TestSetup = function Setup(')
+    .replace('let connectionTimeoutMs', 'let connectionTimeoutMs = 20')
+    .replace('let extensionDirectory', "let extensionDirectory = 'C:/ext'")
+  runInNewContext(source, context)
+  factory(name => name === 'react' ? React : {})
+  const render = () => { cursor = 0; return context.TestSetup() }
+  const find = (node, predicate) => {
+    if (!node || typeof node !== 'object') return undefined
+    if (predicate(node)) return node
+    for (const child of node.children || []) { const found = find(child, predicate); if (found) return found }
+  }
+
+  render()
+  effects.splice(0).forEach(effect => effect())
+  await new Promise(resolve => setImmediate(resolve))
+  const line = find(render(), node => node.props.role === 'status').children[0]
+  // Reloading again is the wrong advice here: the extension is already current, and the dead
+  // script in this page is the whole problem. Name the refresh, not another reload.
+  assert.match(line, /扩展已重新加载，本页脚本已失效：请刷新本页/)
+  assert.doesNotMatch(line, /重新加载扩展/)
 })

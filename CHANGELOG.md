@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.5
+
+- Stop a reloaded extension from turning into an unrecoverable `Extension context invalidated` error. Reloading orphans every already-open page's content script, whose `chrome.*` handles die with the old extension; the previous code called `chrome.storage.sync.get` immediately and let the raw throw escape as an unhandled rejection into the page's error overlay. The bridge and the frame agent now test `chrome.runtime?.id` first — the storage listener cannot cover this, because a dead context receives no storage events — and reply `Extension was reloaded; reconnect to the extension` (a plain answer, not a throw). The settings line turns that into the one step that works: refresh the page.
+- Companion extension is now **0.2.3**: unlike 0.2.3/0.2.4 this release does change extension code (`bridge.js`, `frame-agent.js`), so the required version moves with it.
+
 ## 0.2.4
 
 - Fix the browser panel footer hint, which still named `0.2.1` as the companion version to reload after the required version had moved to `0.2.2`. It now interpolates the required version, so it cannot drift again.
