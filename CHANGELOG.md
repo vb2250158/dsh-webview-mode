@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Fix the browser panel footer hint, which still named `0.2.1` as the companion version to reload after the required version had moved to `0.2.2`. It now interpolates the required version, so it cannot drift again.
+- Have the same hint name the actual failure it addresses: `Extension context invalidated` is raised by a content script orphaned when the extension was reloaded while the page stayed open, so the fix is reloading the extension **and** refreshing the page — not just one of the two.
+- Keep the companion extension at 0.2.2: like 0.2.3, this release changes only the plugin-side settings section, and raising an unchanged extension version would force a pointless extra reload.
+
 ## 0.2.3
 
 - Report a companion extension older than the required version before reporting an unauthorized origin. A stale companion answers the handshake with `configured: false` even when the only real problem is its age, so the previous order told the user to authorize an origin while the setup button that grants it could not run at all; the version and the reload step are now named first.
