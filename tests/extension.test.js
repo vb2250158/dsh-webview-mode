@@ -12,7 +12,7 @@ test('commands target the exact registered iframe document, never a new browser 
     storage: { sync: { get: async () => ({ trustedOrigins: ['https://dsh.example'] }) }, onChanged: { addListener(fn) { changed = fn } } },
     webNavigation: { getFrame: async ({ frameId }) => frameId === 0 ? top : frame },
     tabs: { onRemoved: { addListener(fn) { removed = fn } }, sendMessage: async (...args) => { sent.push(args); return { value: { content: 'actual iframe' } } } },
-    runtime: { getManifest: () => ({ version: '0.2.1' }), onMessage: { addListener(fn) { listener = fn } } },
+    runtime: { id: 'test-extension', getManifest: () => ({ version: '0.2.2' }), onMessage: { addListener(fn) { listener = fn } } },
   }
   runInNewContext(await readFile(new URL('../extension/worker.js', import.meta.url), 'utf8'), { chrome, URL, Date })
   const parent = { tab: { id: 1 }, frameId: 0, documentId: 'top', url: top.url }
@@ -21,7 +21,8 @@ test('commands target the exact registered iframe document, never a new browser 
   const deadline = Date.now() + 10000
   const call = (kind, sender = parent, extra = {}) => new Promise(resolve => listener({ kind, nonce, deadline, ...extra }, sender, resolve))
   assert.equal((await call('status')).value.configured, true)
-  assert.equal((await call('status')).value.version, '0.2.1')
+  assert.equal((await call('status')).value.version, '0.2.2')
+  assert.equal((await call('status')).value.id, 'test-extension')
   assert.equal(sent.length, 0, 'status never binds or dispatches to a frame')
   assert.match((await call('status', child)).error, /Only the current DSH/)
   assert.match((await call('bind-frame', child)).error, /challenge/)
@@ -89,4 +90,27 @@ test('commands target the exact registered iframe document, never a new browser 
   assert.match((await call('frame-event', child, { event: { type: 'link', url: 'https://page.example/' } })).error, /Unbound/)
   removed(1)
   assert.equal(sent.length, 2)
+})
+
+test('an unauthorized origin can only open the extension options page, and only from the top document', async () => {
+  let listener
+  let opened = 0
+  const top = { documentId: 'top', url: 'https://dsh.example/', parentFrameId: -1 }
+  const chrome = {
+    storage: { sync: { get: async () => ({ trustedOrigins: [] }) }, onChanged: { addListener() {} } },
+    webNavigation: { getFrame: async ({ frameId }) => frameId === 0 ? top : { documentId: 'child', url: 'https://page.example/', parentFrameId: 0 } },
+    tabs: { onRemoved: { addListener() {} }, sendMessage: async () => { throw new Error('no page command may dispatch for an unauthorized origin') } },
+    runtime: { id: 'test-extension', getManifest: () => ({ version: '0.2.2' }), onMessage: { addListener(fn) { listener = fn } }, openOptionsPage: async () => { opened++ } },
+  }
+  runInNewContext(await readFile(new URL('../extension/worker.js', import.meta.url), 'utf8'), { chrome, URL, Date })
+  const parent = { tab: { id: 1 }, frameId: 0, documentId: 'top', url: top.url }
+  const call = (kind, sender = parent, extra = {}) => new Promise(resolve => listener({ kind, nonce: '12345678-1234-1234-1234-123456789abc', deadline: Date.now() + 10000, ...extra }, sender, resolve))
+  assert.equal((await call('open-options')).value.opened, true)
+  assert.equal(opened, 1)
+  assert.match((await call('open-options', { ...parent, frameId: 2, documentId: 'child' })).error, /Only the current DSH document/)
+  assert.equal(opened, 1, 'a subframe cannot open the options page')
+  // The relaxation is exactly one action wide: everything else stays denied.
+  assert.match((await call('status')).error, /not configured/)
+  assert.match((await call('frame-command')).error, /not configured/)
+  assert.match((await call('prepare-frame')).error, /not configured/)
 })

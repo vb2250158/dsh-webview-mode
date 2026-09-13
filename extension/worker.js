@@ -12,10 +12,19 @@ async function execute(request, sender) {
   const { trustedOrigins = [] } = await chrome.storage.sync.get('trustedOrigins')
   const top = await chrome.webNavigation.getFrame({ tabId: sender.tab.id, frameId: 0 })
   if (generation !== epoch) throw new Error('Extension settings changed')
+  // Deliberately reachable before an origin is authorized: the options page is where
+  // authorization is granted, so gating this on it would deadlock first-time setup.
+  // The action reads no page, no tab and no archived data, so it grants nothing; it
+  // is still restricted to the current top-level DSH document.
+  if (request?.kind === 'open-options') {
+    if (!top || sender.frameId !== 0 || sender.documentId !== top.documentId) throw new Error('Only the current DSH document may open extension options')
+    await chrome.runtime.openOptionsPage()
+    return { opened: true }
+  }
   if (!top || !trustedOrigins.includes(new URL(top.url).origin)) throw new Error('DSH origin is not configured in extension options')
   if (request?.kind === 'status') {
     if (sender.frameId !== 0 || sender.documentId !== top.documentId || !trustedOrigins.includes(new URL(sender.url).origin)) throw new Error('Only the current DSH document may query capabilities')
-    return { protocol: 1, configured: true, version: chrome.runtime.getManifest().version, actions: ['snapshot', 'click', 'text', 'choose', 'scroll'] }
+    return { protocol: 1, configured: true, version: chrome.runtime.getManifest().version, id: chrome.runtime.id, actions: ['snapshot', 'click', 'text', 'choose', 'scroll'] }
   }
   if (typeof request?.nonce !== 'string' || !/^[a-f0-9-]{36}$/.test(request.nonce)) throw new Error('Invalid frame binding')
   const key = `${sender.tab.id}:${request.nonce}`

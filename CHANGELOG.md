@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2
+
+- Add setup affordances to the settings section: a live extension handshake line and buttons to open the extension options page, copy the `chrome://extensions` deep link, copy the current DSH origin, and copy the extension directory.
+- Let an origin that is not authorized yet reach the extension options page, since that page is where authorization is granted; the action reads no page, tab or archived data, is restricted to the current top-level DSH document, and every other request from such an origin stays denied.
+- Report the extension id in the status handshake so the settings section can deep-link to the right extension card, and fall back to the plain extensions page when the handshake is unavailable.
+- Copy through the async Clipboard API when available and fall back to a temporary field, so copying also works from the plain-HTTP gateway, which is not a secure context.
+- Companion extension version is 0.2.2.
+
 ## 0.2.1
 
 - Add read-only status with archived tab provenance and an actual extension protocol/version handshake; status does not open the panel.

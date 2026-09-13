@@ -8,15 +8,18 @@ if (window === window.top) {
   })
   window.addEventListener('message', async event => {
     if (event.source !== window || event.origin !== location.origin || event.data?.source !== 'dsh-webview-client' || typeof event.data.id !== 'string' || event.data.id.length > 100) return
-    const { trustedOrigins = [] } = await chrome.storage.sync.get('trustedOrigins')
-    if (!trustedOrigins.includes(location.origin)) {
-      if (event.data.request?.kind === 'status') window.postMessage({ source: 'dsh-webview-bridge', id: event.data.id, value: { protocol: 1, version: chrome.runtime.getManifest().version, configured: false, actions: [] } }, location.origin)
-      return
-    }
     const id = event.data.id
-    chrome.runtime.sendMessage(event.data.request).then(
-      value => window.postMessage({ source: 'dsh-webview-bridge', id, ...value }, location.origin),
-      error => window.postMessage({ source: 'dsh-webview-bridge', id, error: error.message }, location.origin),
-    )
+    const kind = event.data.request?.kind
+    const reply = value => window.postMessage({ source: 'dsh-webview-bridge', id, ...value }, location.origin)
+    const forward = () => chrome.runtime.sendMessage(event.data.request).then(reply, error => reply({ error: error.message }))
+    const { trustedOrigins = [] } = await chrome.storage.sync.get('trustedOrigins')
+    if (trustedOrigins.includes(location.origin)) return forward()
+    // An origin that is not authorized yet gets exactly two answers, and neither one
+    // reads a page, a tab or archived data. The handshake lets the DSH settings page
+    // report why the bridge is unavailable; open-options is the last step of first-time
+    // setup, so gating it on the authorization it exists to grant would deadlock.
+    // Every page-read and page-action request stays denied here, silently.
+    if (kind === 'status') return reply({ value: { protocol: 1, configured: false, version: chrome.runtime.getManifest().version, id: chrome.runtime.id, actions: [] } })
+    if (kind === 'open-options') return forward()
   })
 }
