@@ -13,7 +13,7 @@ test('the settings section reports the handshake and exposes the extension setup
     useEffect(effect) { const index = cursor++; if (!(index in hooks)) { hooks[index] = true; effects.push(effect) } },
   }
   const listeners = new Set()
-  const state = { respond: true }
+  const state = { respond: true, version: '0.2.2' }
   const window = {
     addEventListener(_name, fn) { listeners.add(fn) },
     removeEventListener(_name, fn) { listeners.delete(fn) },
@@ -23,7 +23,7 @@ test('the settings section reports the handshake and exposes the extension setup
       queueMicrotask(() => {
         for (const fn of [...listeners]) fn({
           source: window, origin: 'https://dsh.example',
-          data: { source: 'dsh-webview-bridge', id: message.id, value: { protocol: 1, configured: false, version: '0.2.2', id: 'test-extension', actions: [] } },
+          data: { source: 'dsh-webview-bridge', id: message.id, value: { protocol: 1, configured: false, version: state.version, id: 'test-extension', actions: [] } },
         })
       })
     },
@@ -62,7 +62,7 @@ test('the settings section reports the handshake and exposes the extension setup
   let tree = render()
   assert.equal(kinds[0], 'status')
   assert.match(find(tree, node => node.props.role === 'status').children[0], /扩展已安装，但本页来源尚未授权/)
-  assert.deepEqual(['打开扩展选项页', '复制扩展管理页地址', '复制本页来源', '复制扩展目录', '重新检测'].filter(label => !button(tree, label)), [])
+  assert.deepEqual(['打开扩展选项页', '复制扩展选项页地址', '复制扩展管理页地址', '复制本页来源', '复制扩展目录', '重新检测'].filter(label => !button(tree, label)), [])
 
   await button(tree, '复制本页来源').props.onClick()
   assert.deepEqual(copied.at(-1), 'https://dsh.example', 'the origin is what the options page asks for')
@@ -70,13 +70,27 @@ test('the settings section reports the handshake and exposes the extension setup
   assert.deepEqual(copied.at(-1), 'chrome://extensions/?id=test-extension', 'the handshake id produces a deep link to this extension card')
   await button(tree, '复制扩展目录').props.onClick()
   assert.deepEqual(copied.at(-1), 'C:/ext')
+  await button(tree, '复制扩展选项页地址').props.onClick()
+  assert.deepEqual(copied.at(-1), 'chrome-extension://test-extension/options.html', 'the options page opens by paste even when the in-page setup button cannot reach the extension')
   await button(tree, '打开扩展选项页').props.onClick()
   assert.deepEqual(kinds, ['status', 'open-options'])
   tree = render()
   assert.match(find(tree, node => node.props.role === 'status' && node.children[0] !== undefined).children[0], /扩展状态/)
 
-  // Without a handshake there is no id, so the deep link degrades to the plain page
-  // rather than sending the user to a link that cannot resolve.
+  // A companion older than the required version reports "not configured" for an origin that is
+  // merely unauthorized, while it cannot run the setup actions at all. The panel has to name the
+  // version and the reload step, otherwise it sends the user after a problem they do not have.
+  state.version = '0.2.1'
+  await button(tree, '重新检测').props.onClick()
+  await settle()
+  tree = render()
+  const stale = find(tree, node => node.props.role === 'status')
+  assert.match(stale.children[0], /扩展为 0\.2\.1，需要 0\.2\.2/)
+  assert.doesNotMatch(stale.children[0], /尚未授权/)
+  assert.deepEqual(kinds.at(-1), 'status')
+
+  // Without a handshake there is no id, so both id-derived links must degrade instead of
+  // sending the user to an address that cannot resolve.
   state.respond = false
   await button(tree, '重新检测').props.onClick()
   await sleep(120)
@@ -84,4 +98,5 @@ test('the settings section reports the handshake and exposes the extension setup
   assert.match(find(tree, node => node.props.role === 'status').children[0], /未检测到扩展响应/)
   await button(tree, '复制扩展管理页地址').props.onClick()
   assert.deepEqual(copied.at(-1), 'chrome://extensions')
+  assert.equal(button(tree, '复制扩展选项页地址').props.disabled, true, 'no id means no options link to offer')
 })

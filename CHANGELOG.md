@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Report a companion extension older than the required version before reporting an unauthorized origin. A stale companion answers the handshake with `configured: false` even when the only real problem is its age, so the previous order told the user to authorize an origin while the setup button that grants it could not run at all; the version and the reload step are now named first.
+- Add a button that copies `chrome-extension://<id>/options.html`. Pasting it into the address bar opens the options page directly, so first-time authorization still works when the in-page setup button gets no answer from an outdated companion; the button is disabled when the handshake has not reported an id.
+- Keep the companion extension at 0.2.2: this release changes only the plugin-side settings section.
+
 ## 0.2.2
 
 - Add setup affordances to the settings section: a live extension handshake line and buttons to open the extension options page, copy the `chrome://extensions` deep link, copy the current DSH origin, and copy the extension directory.
