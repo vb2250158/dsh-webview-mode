@@ -1,6 +1,6 @@
 {
   "name": "dsh-webview-mode",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "type": "module",
   "description": "Per-conversation browser side panel for DSH",
   "exports": {

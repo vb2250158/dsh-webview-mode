@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.8
+
+- Replace the long operation timeout in browser setup status with a short installation and refresh instruction when the extension handshake fails. The specific reloaded-extension state still asks for a page refresh.
+- Keep the companion extension at 0.2.3 because the extension files are unchanged.
+
 ## 0.2.7
 
 - Supply both the current loader's `schema` field and the newer loader's `create()` field for each Host Typert codec. Both reference the same Zod schema, so the settings UI release loads on either Harness version.

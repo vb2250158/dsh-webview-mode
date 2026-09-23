@@ -86,7 +86,7 @@ test('the settings section guides installation in three steps and reports the ha
   assert.doesNotMatch(stale.children[0], /尚未授权/)
   hooks[0] = { error: '扩展未响应' }
   tree = render()
-  assert.match(find(tree, node => node.props.role === 'status').children[0], /未检测到扩展响应/)
+  assert.match(find(tree, node => node.props.role === 'status').children[0], /扩展暂未连接：请按下面步骤检查，完成后刷新本页/)
   await find(tree, node => node.type === 'ol').children[0].children.at(-1).props.onClick()
   assert.deepEqual(copied.at(-1), 'chrome://extensions')
   assert.equal(button(tree, '复制路径').props.disabled, false)
