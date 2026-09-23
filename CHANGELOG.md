@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.6
+
+- Replace the six-action browser setup toolbar with three numbered installation steps. Each step shows the value to use and one copy action; existing installations can follow the reload instruction in step 2. Keep connection status visible and recheck it when DSH is refreshed.
+- Keep the companion extension at 0.2.3 because this release changes only the settings UI.
+
 ## 0.2.5
 
 - Stop a reloaded extension from turning into an unrecoverable `Extension context invalidated` error. Reloading orphans every already-open page's content script, whose `chrome.*` handles die with the old extension; the previous code called `chrome.storage.sync.get` immediately and let the raw throw escape as an unhandled rejection into the page's error overlay. The bridge and the frame agent now test `chrome.runtime?.id` first — the storage listener cannot cover this, because a dead context receives no storage events — and reply `Extension was reloaded; reconnect to the extension` (a plain answer, not a throw). The settings line turns that into the one step that works: refresh the page.

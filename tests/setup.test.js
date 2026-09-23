@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { runInNewContext } from 'node:vm'
 import { webcrypto } from 'node:crypto'
 
-test('the settings section reports the handshake and exposes the extension setup actions', async () => {
+test('the settings section guides installation in three steps and reports the handshake', async () => {
   let factory, cursor = 0
   const hooks = [], effects = [], copied = [], kinds = []
   const React = {
@@ -13,17 +13,15 @@ test('the settings section reports the handshake and exposes the extension setup
     useEffect(effect) { const index = cursor++; if (!(index in hooks)) { hooks[index] = true; effects.push(effect) } },
   }
   const listeners = new Set()
-  const state = { respond: true, version: '0.2.3' }
   const window = {
     addEventListener(_name, fn) { listeners.add(fn) },
     removeEventListener(_name, fn) { listeners.delete(fn) },
     postMessage(message) {
       kinds.push(message.request.kind)
-      if (!state.respond) return
       queueMicrotask(() => {
         for (const fn of [...listeners]) fn({
           source: window, origin: 'https://dsh.example',
-          data: { source: 'dsh-webview-bridge', id: message.id, value: { protocol: 1, configured: false, version: state.version, id: 'test-extension', actions: [] } },
+          data: { source: 'dsh-webview-bridge', id: message.id, value: { protocol: 1, configured: false, version: '0.2.3', id: 'test-extension', actions: [] } },
         })
       })
     },
@@ -53,7 +51,6 @@ test('the settings section reports the handshake and exposes the extension setup
     for (const child of node.children || []) { const found = find(child, predicate); if (found) return found }
   }
   const settle = () => new Promise(resolve => setImmediate(resolve))
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
   const button = (tree, label) => find(tree, node => node.type === 'button' && node.children[0] === label)
 
   render()
@@ -62,43 +59,37 @@ test('the settings section reports the handshake and exposes the extension setup
   let tree = render()
   assert.equal(kinds[0], 'status')
   assert.match(find(tree, node => node.props.role === 'status').children[0], /扩展已安装，但本页来源尚未授权/)
-  assert.deepEqual(['打开扩展选项页', '复制扩展选项页地址', '复制扩展管理页地址', '复制本页来源', '复制扩展目录', '重新检测'].filter(label => !button(tree, label)), [])
+  const steps = find(tree, node => node.type === 'ol').children
+  assert.equal(steps.length, 3)
+  assert.match(steps[0].children[1].children[0], /Chrome 地址栏.*开发者模式/)
+  assert.match(steps[1].children[1].children[0], /加载已解压的扩展程序.*重新加载/)
+  assert.match(steps[2].children[1].children[0], /扩展程序选项.*DSH 来源.*刷新本页/)
+  assert.equal(find(tree, node => node.type === 'button' && node.children[0] === '重新检测'), undefined)
 
-  await button(tree, '复制本页来源').props.onClick()
-  assert.deepEqual(copied.at(-1), 'https://dsh.example', 'the origin is what the options page asks for')
-  await button(tree, '复制扩展管理页地址').props.onClick()
-  assert.deepEqual(copied.at(-1), 'chrome://extensions/?id=test-extension', 'the handshake id produces a deep link to this extension card')
-  await button(tree, '复制扩展目录').props.onClick()
+  await steps[0].children.at(-1).props.onClick()
+  assert.deepEqual(copied.at(-1), 'chrome://extensions')
+  await steps[1].children.at(-1).props.onClick()
   assert.deepEqual(copied.at(-1), 'C:/ext')
-  await button(tree, '复制扩展选项页地址').props.onClick()
-  assert.deepEqual(copied.at(-1), 'chrome-extension://test-extension/options.html', 'the options page opens by paste even when the in-page setup button cannot reach the extension')
-  await button(tree, '打开扩展选项页').props.onClick()
-  assert.deepEqual(kinds, ['status', 'open-options'])
+  await steps[2].children.at(-1).props.onClick()
+  assert.deepEqual(copied.at(-1), 'https://dsh.example', 'the origin is what the options page asks for')
+  assert.deepEqual(kinds, ['status'])
   tree = render()
   assert.match(find(tree, node => node.props.role === 'status' && node.children[0] !== undefined).children[0], /扩展状态/)
 
   // A companion older than the required version reports "not configured" for an origin that is
   // merely unauthorized, while it cannot run the setup actions at all. The panel has to name the
   // version and the reload step, otherwise it sends the user after a problem they do not have.
-  state.version = '0.2.1'
-  await button(tree, '重新检测').props.onClick()
-  await settle()
+  hooks[0] = { protocol: 1, configured: false, version: '0.2.1' }
   tree = render()
   const stale = find(tree, node => node.props.role === 'status')
   assert.match(stale.children[0], /扩展为 0\.2\.1，需要 0\.2\.3/)
   assert.doesNotMatch(stale.children[0], /尚未授权/)
-  assert.deepEqual(kinds.at(-1), 'status')
-
-  // Without a handshake there is no id, so both id-derived links must degrade instead of
-  // sending the user to an address that cannot resolve.
-  state.respond = false
-  await button(tree, '重新检测').props.onClick()
-  await sleep(120)
+  hooks[0] = { error: '扩展未响应' }
   tree = render()
   assert.match(find(tree, node => node.props.role === 'status').children[0], /未检测到扩展响应/)
-  await button(tree, '复制扩展管理页地址').props.onClick()
+  await find(tree, node => node.type === 'ol').children[0].children.at(-1).props.onClick()
   assert.deepEqual(copied.at(-1), 'chrome://extensions')
-  assert.equal(button(tree, '复制扩展选项页地址').props.disabled, true, 'no id means no options link to offer')
+  assert.equal(button(tree, '复制路径').props.disabled, false)
 })
 
 test('the settings section asks for a page refresh when the extension was reloaded', async () => {
