@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.7
+
+- Supply both the current loader's `schema` field and the newer loader's `create()` field for each Host Typert codec. Both reference the same Zod schema, so the settings UI release loads on either Harness version.
+- Keep the companion extension at 0.2.3 because the extension files are unchanged.
+
 ## 0.2.6
 
 - Replace the six-action browser setup toolbar with three numbered installation steps. Each step shows the value to use and one copy action; existing installations can follow the reload instruction in step 2. Keep connection status visible and recheck it when DSH is refreshed.
