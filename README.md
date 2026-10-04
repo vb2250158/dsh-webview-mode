@@ -1,5 +1,7 @@
 # DSH WebView Mode
 
+This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compatibility details](docs/dsh-0.2-compatibility.md).
+
 独立插件，在当前对话中嵌入真实 iframe 网页并保留聊天区域。不创建独立自动化浏览器，不修改官方源码。插件版本为 0.2.8，配套扩展版本为 0.2.3；源码、已安装插件、运行中的 Host 和浏览器扩展版本需要分别核对。
 
 ## 使用与页面状态

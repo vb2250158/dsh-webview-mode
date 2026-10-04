@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.9
+
+- Update DSH compatibility requirements and interfaces for 0.2.1-alpha.1.
+
 ## 0.2.8
 
 - Replace the long operation timeout in browser setup status with a short installation and refresh instruction when the extension handshake fails. The specific reloaded-extension state still asks for a page refresh.

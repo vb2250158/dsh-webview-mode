@@ -1,6 +1,6 @@
 {
   "name": "dsh-webview-mode",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "type": "module",
   "description": "Per-conversation browser side panel for DSH",
   "exports": {
@@ -19,7 +19,10 @@
         "@deepseek-ai/dsh-api-remotes",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-ui-settings"
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session"
       ]
     }
   },
@@ -27,10 +30,9 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
-    "@deepseek-ai/dsh-typert-protocol": "0.1.0-rc.8",
-    "@deepseek-ai/schemastery": "3.18.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-alpha.1",
     "zod": "^4.0.0",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.8"
+    "@deepseek-ai/dsh-tools": "0.2.1-alpha.1"
   },
   "license": "MIT",
   "author": "vb2250158",
@@ -46,6 +48,14 @@
     "cordis.patch.yml",
     "README.md",
     "LICENSE",
-    "extension"
-  ]
+    "extension",
+    "docs"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "3.18.1",
+    "@deepseek-ai/dsh-api-remotes": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-api-session-controller": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-session": ">=0.2.1-alpha.1 <0.3.0"
+  }
 }
