@@ -1,6 +1,6 @@
 {
   "name": "dsh-webview-mode",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "type": "module",
   "description": "Per-conversation browser side panel for DSH",
   "exports": {
@@ -52,7 +52,7 @@
     "docs"
   ],
   "peerDependencies": {
-    "@deepseek-ai/schemastery": "3.18.1",
+    "@deepseek-ai/schemastery": ">=3.18.5-alpha.1 <4.0.0",
     "@deepseek-ai/dsh-api-remotes": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/dsh-api-session-controller": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.1-alpha.1 <0.3.0",

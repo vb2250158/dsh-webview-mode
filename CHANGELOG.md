@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.10
+
+- Align maintenance lockfiles and peer versions with the DSH 0.2 runtime.
+
 ## 0.2.9
 
 - Update DSH compatibility requirements and interfaces for 0.2.1-alpha.1.
