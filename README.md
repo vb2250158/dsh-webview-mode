@@ -87,3 +87,7 @@ DOM 动作使用合成事件；不支持 Canvas、嵌套框架、关闭的 Shado
 ## Plugin display metadata
 
 The plugin list shows **Browser side panel** in English and **浏览器侧栏** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).
+
+## 插件设置入口
+
+在插件列表中点击本插件进入详情页，即可使用原有配置和操作界面；设置菜单不再重复显示该插件入口。
