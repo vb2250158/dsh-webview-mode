@@ -1,13 +1,15 @@
 {
   "name": "dsh-webview-mode",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "type": "module",
   "description": "Per-conversation browser side panel for DSH",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./typert": "./lib/typert.host.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
   },
   "dsh": {
     "bundle": {
@@ -49,7 +51,10 @@
     "README.md",
     "LICENSE",
     "extension",
-    "docs"
+    "docs",
+    "locale",
+    "icon.svg",
+    "ICON_LICENSE.txt"
   ],
   "peerDependencies": {
     "@deepseek-ai/schemastery": ">=3.18.5-alpha.1 <4.0.0",
@@ -57,5 +62,6 @@
     "@deepseek-ai/dsh-api-session-controller": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/dsh-client-ui-session": ">=0.2.1-alpha.1 <0.3.0"
-  }
+  },
+  "icon": "./icon.svg"
 }

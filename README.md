@@ -83,3 +83,7 @@ DOM 动作使用合成事件；不支持 Canvas、嵌套框架、关闭的 Shado
 `pnpm test` 执行 Node 回归用例。DOM 测试需要现有 jsdom，真实扩展测试需要现有 Playwright 与 Chromium；可将 `DSH_DOM_TEST_RESOLVE_FROM` 指向拥有对应依赖的 package.json，分别运行 `node --test tests/frame-dom.test.js` 和 `node --test tests/frame-browser.test.js`。缺依赖明确跳过，不自动下载。`DSH_EXTENSION_BROWSER_EXECUTABLE` 可指定已有测试浏览器。
 
 真实扩展测试使用独立临时 profile 和两个临时 HTTP 来源，验证相同的生产 sandbox 属性下，读取/填写/点击操作同一跨域 iframe，标签数不增，导航后的旧引用和未授权来源被拒绝。测试浏览器与 fixture 在结束时清理。该测试不是当前用户 GUI 或具体业务网站的验收。
+
+## Plugin display metadata
+
+The plugin list shows **Browser side panel** in English and **浏览器侧栏** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).
