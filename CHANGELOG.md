@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 (2026-10-08)
+
+- 官方侧栏通过 bundle 和 Client 注入声明加载，移除没有直接模块导入的额外 npm peer 声明。
+- Keep Browser activation and ordering in the bundle and Client injection metadata without adding unused npm peer edges.
+
 ## 0.3.2 (2026-10-08)
 
 - 选择、导航和刷新主动展开官方侧栏，避免收起状态等待页面挂载超时。
