@@ -1,6 +1,6 @@
 {
   "name": "dsh-webview-mode",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "type": "module",
   "description": "Agent bridge for the official DSH Sidebar Browser",
   "exports": {

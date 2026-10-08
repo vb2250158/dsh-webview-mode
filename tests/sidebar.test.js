@@ -4,12 +4,12 @@ import { readFile } from 'node:fs/promises'
 import { runInNewContext } from 'node:vm'
 import { webcrypto } from 'node:crypto'
 
-async function harness(savedTabs = [], storageFailure = false) {
+async function harness(savedTabs = [], storageFailure = false, url = 'https://dsh.test') {
   let factory
   const listeners = new Map()
   const window = { __ModuleLoader__: { load(entry) { factory = entry.factory } },
     addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) }
-  const context = { window, URL, location: { origin: 'https://dsh.test' }, crypto: webcrypto,
+  const context = { window, URL, location: new URL(url), crypto: webcrypto,
     setTimeout, clearTimeout, setInterval, clearInterval, console }
   const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
     .replace('function createSidebarAdapter(', 'globalThis.TestAdapter = function createSidebarAdapter(')
@@ -37,6 +37,22 @@ async function harness(savedTabs = [], storageFailure = false) {
   const command = action => adapter.command('s', { action, token: 'test', expiresAt: Date.now() + 1000 })
   return { adapter, command, saved, records, actions, markers, listeners, get reads() { return reads }, setSession(value) { session = value }, sidebar, browser }
 }
+
+test('Desktop navigation and status do not probe Chrome; DOM commands report the missing public guest API', async () => {
+  const h = await harness([], false, 'dsh-app://app/')
+  try {
+    await h.command({ action: 'new', url: 'https://a.test/' })
+    await h.command({ action: 'navigate', url: 'https://next.test/' })
+    await h.command({ action: 'reload' })
+    const state = await h.command({ action: 'status' })
+    assert.equal(state.carrier, 'desktop')
+    assert.equal(state.dom.state, 'unsupported')
+    assert.equal(state.extension.state, 'not-applicable')
+    for (const action of ['snapshot', 'click', 'text', 'choose', 'scroll']) await assert.rejects(h.command({ action }), /public Sidebar Browser guest API/)
+    h.setSession('other')
+    await assert.rejects(h.command({ action: 'reload' }), /not on screen/)
+  } finally { h.adapter.dispose() }
+})
 
 test('imports saved tabs once, retains the archive and translates old ids into official navigation', async () => {
   const original = [{ id: 'old-a', url: 'https://a.test/', title: 'A' }, { id: 'old-b', url: 'about:blank', title: 'B' }]

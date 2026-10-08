@@ -1,5 +1,9 @@
 # DSH 浏览器操作桥接
 
+## 0.3.5：Desktop 能力状态
+
+Desktop 使用官方 Sidebar Browser 的标签创建、选择、关闭、导航与刷新接口。状态返回 `carrier: desktop`、`dom.state: unsupported` 和 `extension.state: not-applicable`，不探测 Chrome 扩展。Desktop 网页快照、点击、输入、选择与滚动仍需官方受控 guest DOM 接口，目前明确拒绝这些操作；Web 扩展流程不变。
+
 0.3.4 复用官方 `@deepseek-ai/dsh-client-ui-sidebar-browser`。标签、地址栏、前进后退、刷新、布局和聊天链接由官方管理；本插件提供 `conversation_browser`，让 Agent 操作同一个可见 iframe。
 
 ## 安装条件
