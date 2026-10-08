@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 (2026-10-08)
+
+- 选择、导航和刷新主动展开官方侧栏，避免收起状态等待页面挂载超时。
+- Reveal the official Sidebar before commands that need its mounted page.
+
 ## 0.3.1 (2026-10-08)
 
 - 修正随包接口补丁中的双语一致性记录，验证补丁可完整反向校验。

@@ -51,6 +51,7 @@ test('imports saved tabs once, retains the archive and translates old ids into o
     assert.equal(h.saved.revision, 9)
     await h.command({ action: 'select', tabId: 'old-b' })
     assert.equal(h.sidebar.active().id, 'tab-2')
+    assert.equal(h.sidebar.isExpanded(), true)
     await h.command({ action: 'navigate', url: 'https://next.test/' })
     assert.ok(h.actions.some(action => action[0] === 'navigate' && action[2] === 'tab-2'))
     await h.command({ action: 'reload' })
