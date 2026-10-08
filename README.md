@@ -1,6 +1,6 @@
 # DSH 浏览器操作桥接
 
-0.3.0 复用官方 `@deepseek-ai/dsh-client-ui-sidebar-browser`。标签、地址栏、前进后退、刷新、布局和聊天链接由官方管理；本插件提供 `conversation_browser`，让 Agent 操作同一个可见 iframe。
+0.3.1 复用官方 `@deepseek-ai/dsh-client-ui-sidebar-browser`。标签、地址栏、前进后退、刷新、布局和聊天链接由官方管理；本插件提供 `conversation_browser`，让 Agent 操作同一个可见 iframe。
 
 ## 安装条件
 

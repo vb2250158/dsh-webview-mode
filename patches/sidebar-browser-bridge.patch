@@ -1,3 +1,18 @@
+diff --git a/packages/client/ui-sidebar-browser/README.i18n.yaml b/packages/client/ui-sidebar-browser/README.i18n.yaml
+index d17a985..2a520ed 100644
+--- a/packages/client/ui-sidebar-browser/README.i18n.yaml
++++ b/packages/client/ui-sidebar-browser/README.i18n.yaml
+@@ -21,8 +21,8 @@
+   en: fb79cb7d59bc01af
+   zh: 5f6202d8b0b62d7d
+ /deepseek-ai-dsh-client-ui-sidebar-browser/use-this-package/minimal-configuration:
+-  en: abf28ea63777e2a8
+-  zh: 1b68bdf5729de71e
++  en: 02b5736f6572efb3
++  zh: 95a1a6f67e1fcacd
+ /deepseek-ai-dsh-client-ui-sidebar-browser/understand-the-implementation:
+   en: 42b15ac6321706aa
+   zh: e15901d8462ec7c7
 diff --git a/packages/client/ui-sidebar-browser/README.md b/packages/client/ui-sidebar-browser/README.md
 index e3664ef..cd55c1c 100644
 --- a/packages/client/ui-sidebar-browser/README.md
@@ -353,7 +368,7 @@ index 0000000..489b2e7
 +包测试覆盖 Session 隔离、官方持久化写入、非法地址、替换与隐藏后的租约失效、注册释放以及已有 Web/Desktop 导航。调用插件另外验证旧存档迁移和跨域合成网页上的扩展操作。
 diff --git a/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.i18n.yaml b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.i18n.yaml
 new file mode 100644
-index 0000000..fdb7c67
+index 0000000..7d481a7
 --- /dev/null
 +++ b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.i18n.yaml
 @@ -0,0 +1,16 @@
@@ -362,8 +377,8 @@ index 0000000..fdb7c67
 +# After editing either side, bring the other along and re-record with:
 +#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.md
 +/agent-note-sidebar-browser-extension-bridge:
-+  en: 7b1b800ee7e643d3
-+  zh: f76de72a70312d16
++  en: 89004b03041546cb
++  zh: ff2535b0b3d24367
 +/agent-note-sidebar-browser-extension-bridge/decision:
 +  en: 74027cdf73ff152d
 +  zh: 27162fe782c31982

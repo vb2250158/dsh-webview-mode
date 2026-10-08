@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 (2026-10-08)
+
+- 修正随包接口补丁中的双语一致性记录，验证补丁可完整反向校验。
+- Refresh translation-pair records in the bundled official bridge patch.
+
 ## 0.3.0 (2026-10-08)
 
 - 浏览界面、标签、布局和聊天链接交给官方 Sidebar Browser，只保留 Agent 操作桥接。
