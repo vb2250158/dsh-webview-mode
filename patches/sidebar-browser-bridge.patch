@@ -1,0 +1,375 @@
+diff --git a/packages/client/ui-sidebar-browser/README.md b/packages/client/ui-sidebar-browser/README.md
+index e3664ef..cd55c1c 100644
+--- a/packages/client/ui-sidebar-browser/README.md
++++ b/packages/client/ui-sidebar-browser/README.md
+@@ -42,6 +42,8 @@ The package has no plugin configuration. A Web profile enables the shipped entry
+ 
+ Client plugins can open a tab through `ctx.sidebarRight.openTab('browser', { params: { url } })`. The optional URL passes the same validation as address-bar input before navigation.
+ 
++`ctx.sidebarBrowser` exposes Session/tab-scoped `read`, `navigate`, `reload`, and optional `messageTarget` access to mounted official Browser controllers. A message lease expires when its iframe is replaced, detached, or hidden; Desktop supplies no iframe lease. The service neither reads website content nor registers model tools. Consumers own extension authorization, current-tab selection, cancellation, and logged results.
++
+ The `browser.new` command opens a separate Browser page in the focused dock pane, replacing a guide and retaining existing content pages. From the conversation or a floating content page, it uses the active dock pane. Desktop defaults to Cmd+T on macOS and Ctrl+T on Windows; Windows and macOS Web use the [shortcut service’s platform defaults](../shortcuts/README.md); Linux Web leaves the command unbound. The guide button uses a blue globe and displays the effective shortcut inline without a duplicate tooltip.
+ 
+ The toolbar provides Back, Forward, Reload, Go, and Open in system browser. Web also offers a per-tab sandbox toggle; disabling it is temporary and displays an amber warning with neutral text. Desktop shows the observed page title. After a restart, Browser shows the saved title and URL; Restore or Reload opens that address only when requested.
+diff --git a/packages/client/ui-sidebar-browser/README.zh.md b/packages/client/ui-sidebar-browser/README.zh.md
+index 4be25a3..4c460d4 100644
+--- a/packages/client/ui-sidebar-browser/README.zh.md
++++ b/packages/client/ui-sidebar-browser/README.zh.md
+@@ -42,6 +42,8 @@ Browser 在 Web profile 中默认禁用，在 Desktop 中默认启用。Web 用
+ 
+ Client 插件可以调用 `ctx.sidebarRight.openTab('browser', { params: { url } })` 打开 tab。可选 URL 会在导航前接受与地址栏输入相同的校验。
+ 
++`ctx.sidebarBrowser` 按 Session 与标签 ID 提供已挂载浏览器的 `read`、`navigate`、`reload` 和可选 `messageTarget`。iframe 消息租约在替换、卸载或隐藏后失效；Desktop 不提供该租约。服务不读取网页或注册模型工具；调用方负责扩展授权、当前标签选择、取消和结果记录。
++
+ 命令 `browser.new` 在焦点停靠分栏打开独立浏览器页，替换开始页并保留已有内容页。从聊天区或浮动内容页触发时，使用活动停靠分栏。桌面默认键在 macOS 上为 Cmd+T，在 Windows 上为 Ctrl+T；Windows 和 macOS Web 使用[快捷键服务的平台默认值](../shortcuts/README.zh.md)；Linux Web 默认不绑定此命令。开始页按钮使用蓝色地球图标，并在按钮内显示有效快捷键，不额外弹出重复提示。
+ 
+ 工具栏提供后退、前进、刷新、前往和在系统浏览器中打开。Web 还提供逐 tab sandbox 开关；关闭它是临时选择，并会显示灰字、琥珀色底的警告。Desktop 显示观察到的页面标题。重启后，Browser 展示保存的标题和 URL；只有点击恢复或刷新才打开该地址。
+diff --git a/packages/client/ui-sidebar-browser/src/client/browser/BrowserController.ts b/packages/client/ui-sidebar-browser/src/client/browser/BrowserController.ts
+index 45d17bb..121b87e 100644
+--- a/packages/client/ui-sidebar-browser/src/client/browser/BrowserController.ts
++++ b/packages/client/ui-sidebar-browser/src/client/browser/BrowserController.ts
+@@ -3,7 +3,7 @@ import { createSnapshotStore, type BoundActions, type SnapshotStore } from '@dee
+ import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
+ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+ import type { BrowserFrameState } from './BrowserFrame.ts'
+-import type { BrowserPage, BrowserPageFactory } from './BrowserPage.ts'
++import type { BrowserPage, BrowserPageFactory, BrowserMessageTarget } from './BrowserPage.ts'
+ import { currentBrowserTarget, type BrowserTabState } from './BrowserPersistence.ts'
+ import type { BrowserStore } from './store.ts'
+ import { parseBrowserAddress, type BrowserAddressFailure, type BrowserTarget } from './url.ts'
+@@ -139,6 +139,9 @@ export class BrowserController implements HostObservable<BrowserControllerState>
+    */
+   rebind(actions: BoundActions<BrowserStore>): void { this.actions = actions }
+ 
++  /** @returns current iframe message lease, absent after disposal or for a non-iframe carrier. */
++  messageTarget(): BrowserMessageTarget | undefined { return this.disposed ? undefined : this.page.messageTarget?.() }
++
+   /**
+    * Release the page and detach occurrence and state listeners.
+    * @returns after page teardown; repeated callers join the same disposal.
+@@ -181,6 +184,8 @@ export interface BrowserMountRequest {
+ 
+ /** Plain Slot callbacks and a framework-bound state source, not a desktop protocol. */
+ export interface BrowserInjected {
++  /** @param tabId - owning occurrence. @returns current iframe message lease, if supported and mounted. */
++  messageTarget(tabId: TabId): BrowserMessageTarget | undefined
+   readonly keyedHooks: {
+     readonly browserState: (key: string) => HostObservable<BrowserControllerState> | undefined
+   }
+@@ -221,6 +226,7 @@ export function createBrowserControllers(actions: BoundActions<BrowserStore>, cr
+   }>()
+   const controller = (id: TabId): BrowserController | undefined => controllers.get(id)?.controller
+   return {
++    messageTarget: id => controller(id)?.messageTarget(),
+     keyedHooks: { browserState: key => controller(key as TabId) },
+     mount(request) {
+       const { tabId, signal } = request
+diff --git a/packages/client/ui-sidebar-browser/src/client/browser/BrowserPage.ts b/packages/client/ui-sidebar-browser/src/client/browser/BrowserPage.ts
+index c235126..feb54eb 100644
+--- a/packages/client/ui-sidebar-browser/src/client/browser/BrowserPage.ts
++++ b/packages/client/ui-sidebar-browser/src/client/browser/BrowserPage.ts
+@@ -14,6 +14,17 @@ export interface BrowserPageOptions {
+ export interface BrowserPage {
+   readonly frame: BrowserFrame
+   readonly presentation: BrowserPresentation
++  /** Optional current iframe lease; obtaining it does not inspect cross-origin content. */
++  readonly messageTarget?: () => BrowserMessageTarget | undefined
++}
++
++/** A physical iframe lease becomes invalid when its element is replaced or hidden. */
++export interface BrowserMessageTarget {
++  readonly source: Window
++  /** @returns whether this exact physical iframe remains connected and visible. */
++  isVisible(): boolean
++  /** Send a bridge challenge only while this physical iframe is visible. @param value - challenge, never credentials. */
++  send(value: unknown): void
+ }
+ 
+ /** Construct an idle provider without attaching DOM; saved navigation waits for an explicit frame command. */
+diff --git a/packages/client/ui-sidebar-browser/src/client/index.ts b/packages/client/ui-sidebar-browser/src/client/index.ts
+index d44226e..65a5993 100644
+--- a/packages/client/ui-sidebar-browser/src/client/index.ts
++++ b/packages/client/ui-sidebar-browser/src/client/index.ts
+@@ -18,6 +18,17 @@ import type { BrowserPageFactory } from './browser/BrowserPage.ts'
+ import { BROWSER_ID, browserDefinition } from './definition.tsx'
+ import { en, zh } from './locales.ts'
+ import { createBrowserStore } from './browser/store.ts'
++import { SidebarBrowserBridge } from './bridge.ts'
++
++export { SidebarBrowserBridge } from './bridge.ts'
++export type { BrowserMessageTarget } from './browser/BrowserPage.ts'
++
++declare module '@deepseek-ai/cordis' {
++  interface Context {
++    /** Official Browser navigation and optional iframe messaging by Session and tab identity. */
++    sidebarBrowser: SidebarBrowserBridge
++  }
++}
+ 
+ export type { BrowserBodyProps } from './view/BrowserBody.tsx'
+ export type { BrowserControllerState, BrowserInjected, BrowserMountRequest } from './browser/BrowserController.ts'
+@@ -65,6 +76,8 @@ export function apply(ctx: Context): void {
+     }), 'ui-sidebar-browser: shortcut')
+   })
+   const store = createBrowserStore()
++  const bridge = new SidebarBrowserBridge()
++  ctx.provide('sidebarBrowser', bridge)
+   const openTabs = ctx.sidebarRight.openTabs
+   const carrier = (globalThis as typeof globalThis & {
+     dshDesktop?: { readonly protocolVersion: number; readonly browser?: DesktopBrowserBridge }
+@@ -74,8 +87,11 @@ export function apply(ctx: Context): void {
+   ctx.effect(() => ctx.sidebarRightTabs.register({ ...browserDefinition(t), keepMounted: desktop !== undefined }), 'ui-sidebar-browser.type')
+   const installFrames = (scope: Context, factory: (sessionId: BrowserBodyProps['sessionId']) => BrowserPageFactory): void => {
+     const controllers = new Map<BrowserBodyProps['sessionId'], BrowserInjected>()
++    const releases = new Map<BrowserBodyProps['sessionId'], () => void>()
+     scope.effect(() => async () => {
+       const pending = [...controllers.values()].map(controller => controller.dispose())
++      for (const release of releases.values()) release()
++      releases.clear()
+       controllers.clear()
+       await Promise.all(pending)
+     }, 'ui-sidebar-browser.frames')
+@@ -90,6 +106,7 @@ export function apply(ctx: Context): void {
+         const controller = createBrowserControllers(actions, factory(sessionId), tabId =>
+           openTabs.getSnapshot().some(tab => tab.sessionId === sessionId && tab.tabId === tabId))
+         controllers.set(sessionId, controller)
++        releases.set(sessionId, bridge.register(sessionId, controller))
+         return controller
+       },
+     }, BrowserBody)), 'ui-sidebar-browser.body')
+diff --git a/packages/client/ui-sidebar-browser/src/client/pages.ts b/packages/client/ui-sidebar-browser/src/client/pages.ts
+index 220616b..7d75229 100644
+--- a/packages/client/ui-sidebar-browser/src/client/pages.ts
++++ b/packages/client/ui-sidebar-browser/src/client/pages.ts
+@@ -15,5 +15,5 @@ export function createIframePage(options: BrowserPageOptions): BrowserPage {
+     remounted: () => { frame.reload() },
+   })
+   const frame = new IframeImpl(options, presentation)
+-  return { frame, presentation }
++  return { frame, presentation, messageTarget: () => presentation.messageTarget() }
+ }
+diff --git a/packages/client/ui-sidebar-browser/src/client/view/IframePresentation.ts b/packages/client/ui-sidebar-browser/src/client/view/IframePresentation.ts
+index fc064f5..3f276b7 100644
+--- a/packages/client/ui-sidebar-browser/src/client/view/IframePresentation.ts
++++ b/packages/client/ui-sidebar-browser/src/client/view/IframePresentation.ts
+@@ -1,6 +1,7 @@
+ /** Iframe DOM and revision-tagged load observations. */
+ import type { BrowserTarget } from '../browser/url.ts'
+ import type { BrowserPresentation } from './BrowserPresentation.ts'
++import type { BrowserMessageTarget } from '../browser/BrowserPage.ts'
+ import css from './Browser.module.css'
+ 
+ /** Fixed iframe policy; top navigation and downloads are not granted directly. */
+@@ -63,6 +64,27 @@ export class IframePresentation implements BrowserPresentation {
+     this.document = undefined
+   }
+ 
++  /** @returns a lease for the current physical frame, without reading its document. */
++  messageTarget(): BrowserMessageTarget | undefined {
++    const element = this.element
++    const source = element?.contentWindow
++    if (element === undefined || source === null || source === undefined) return undefined
++    const isVisible = (): boolean => {
++      if (this.element !== element || !element.isConnected
++        || !Array.from(element.getClientRects()).some(rect => rect.width > 0 && rect.height > 0)) return false
++      for (let parent: HTMLElement | null = element; parent !== null; parent = parent.parentElement) {
++        const style = getComputedStyle(parent)
++        if (parent.hidden || parent.inert || parent.getAttribute('aria-hidden') === 'true'
++          || style.display === 'none' || style.opacity === '0' || style.visibility === 'hidden' || style.visibility === 'collapse') return false
++      }
++      return true
++    }
++    return { source, isVisible, send: (value) => {
++      if (!isVisible()) throw new Error('Browser iframe lease is no longer visible')
++      source.postMessage(value, '*')
++    } }
++  }
++
+   private render(): void {
+     const current = this.document
+     const host = this.host
+diff --git a/packages/client/ui-sidebar-browser/src/client/bridge.ts b/packages/client/ui-sidebar-browser/src/client/bridge.ts
+new file mode 100644
+index 0000000..2f2fc01
+--- /dev/null
++++ b/packages/client/ui-sidebar-browser/src/client/bridge.ts
+@@ -0,0 +1,49 @@
++/** Session-scoped access to the Browser controllers owned by the official tab renderer. */
++import type { SidebarRightOpenTab, TabId } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
++import type { BrowserInjected, BrowserControllerState } from './browser/BrowserController.ts'
++import type { BrowserMessageTarget } from './browser/BrowserPage.ts'
++
++type SessionId = SidebarRightOpenTab['sessionId']
++
++/** Navigation and optional iframe messaging; this service never reads website content. */
++export class SidebarBrowserBridge {
++  private readonly sessions = new Map<SessionId, BrowserInjected>()
++
++  /** @param sessionId - owning Session. @param controller - renderer-owned callbacks. @returns unregisters this exact binding. */
++  register(sessionId: SessionId, controller: BrowserInjected): () => void {
++    if (this.sessions.has(sessionId)) throw new Error('Browser Session already registered')
++    this.sessions.set(sessionId, controller)
++    let released = false
++    return () => {
++      if (released) return
++      released = true
++      if (this.sessions.get(sessionId) === controller) this.sessions.delete(sessionId)
++    }
++  }
++
++  /** @param sessionId - owning Session. @param tabId - Browser occurrence. @returns recorded navigation, or absence before mounting. */
++  read(sessionId: SessionId, tabId: TabId): BrowserControllerState | undefined {
++    return this.sessions.get(sessionId)?.keyedHooks.browserState(tabId)?.getSnapshot()
++  }
++
++  /** @param sessionId - owning Session. @param tabId - mounted Browser occurrence. @param url - address validated by its controller. */
++  navigate(sessionId: SessionId, tabId: TabId, url: string): void {
++    this.require(sessionId, tabId).loadUrl(tabId, url)
++  }
++
++  /** @param sessionId - owning Session. @param tabId - mounted Browser occurrence. */
++  reload(sessionId: SessionId, tabId: TabId): void {
++    this.require(sessionId, tabId).reload(tabId)
++  }
++
++  /** @param sessionId - owning Session. @param tabId - mounted Browser occurrence. @returns current iframe message lease, absent for Desktop or an unmounted page. */
++  messageTarget(sessionId: SessionId, tabId: TabId): BrowserMessageTarget | undefined {
++    return this.require(sessionId, tabId).messageTarget(tabId)
++  }
++
++  private require(sessionId: SessionId, tabId: TabId): BrowserInjected {
++    const controller = this.sessions.get(sessionId)
++    if (controller?.keyedHooks.browserState(tabId) === undefined) throw new Error('Browser tab is not mounted in this Session')
++    return controller
++  }
++}
+diff --git a/packages/client/ui-sidebar-browser/tests/bridge.client.spec.ts b/packages/client/ui-sidebar-browser/tests/bridge.client.spec.ts
+new file mode 100644
+index 0000000..1f8e636
+--- /dev/null
++++ b/packages/client/ui-sidebar-browser/tests/bridge.client.spec.ts
+@@ -0,0 +1,60 @@
++// @vitest-environment jsdom
++/** Bridge commands retain official navigation ownership and revoke replaced iframe leases. */
++import { afterEach, expect, it, vi } from 'vitest'
++import type { SidebarRightOpenTab, TabId } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
++import { SidebarBrowserBridge } from '../src/client/bridge.ts'
++import { createBrowserControllers } from '../src/client/browser/BrowserController.ts'
++import { createBrowserStore } from '../src/client/browser/store.ts'
++import { createIframePage } from '../src/client/pages.ts'
++
++afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); localStorage.clear() })
++
++it('keeps tabs scoped to their Session and withdraws the exact controller registration', async () => {
++  const session = 'bridge-session' as SidebarRightOpenTab['sessionId']
++  const other = 'other-session' as SidebarRightOpenTab['sessionId']
++  const tab = 'bridge-tab' as TabId
++  const store = createBrowserStore().create('bridge-fixture')
++  const face = createBrowserControllers(store.actions, createIframePage, () => true)
++  const service = new SidebarBrowserBridge()
++  const release = service.register(session, face)
++  expect(() => service.register(session, face)).toThrow('already registered')
++  expect(service.read(session, tab)).toBeUndefined()
++  expect(() => service.navigate(session, tab, 'https://example.test')).toThrow('not mounted')
++  const host = document.createElement('div')
++  host.id = 'bridge-viewport'
++  document.body.append(host)
++  const lifetime = new AbortController()
++  try {
++    face.mount({ tabId: tab, signal: lifetime.signal, viewportId: host.id, applicationOrigin: 'https://dsh.test',
++      initial: undefined, initialUrl: 'https://example.test/one', openTab: vi.fn() })
++    expect(() => service.reload(other, tab)).toThrow('not mounted')
++    const element = host.querySelector('iframe')!
++    vi.spyOn(element, 'getClientRects').mockReturnValue([{ width: 100, height: 100 }] as unknown as DOMRectList)
++    const lease = service.messageTarget(session, tab)!
++    expect(lease.isVisible()).toBe(true)
++    const post = vi.spyOn(lease.source, 'postMessage')
++    lease.send({ challenge: 'fixture' })
++    expect(post).toHaveBeenCalledWith({ challenge: 'fixture' }, '*')
++    host.hidden = true
++    expect(lease.isVisible()).toBe(false)
++    expect(() => lease.send({ challenge: 'hidden' })).toThrow('no longer visible')
++    host.hidden = false
++    service.navigate(session, tab, 'https://example.test/two')
++    expect(service.read(session, tab)?.frame.target?.url).toBe('https://example.test/two')
++    expect(store.getSnapshot().byTab[tab]?.entries.at(-1)?.url).toBe('https://example.test/two')
++    expect(lease.isVisible()).toBe(false)
++    expect(() => lease.send({ challenge: 'replaced' })).toThrow('no longer visible')
++    service.navigate(session, tab, 'javascript:alert(1)')
++    expect(service.read(session, tab)?.addressFailure).toBeDefined()
++    expect(service.read(session, tab)?.frame.target?.url).toBe('https://example.test/two')
++    service.reload(session, tab)
++    lifetime.abort()
++    expect(service.read(session, tab)).toBeUndefined()
++    expect(() => service.messageTarget(session, tab)).toThrow('not mounted')
++    release()
++    const next = service.register(session, face)
++    release()
++    expect(() => service.register(session, face)).toThrow('already registered')
++    next()
++  } finally { release(); lifetime.abort(); await face.dispose() }
++})
+diff --git a/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.md b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.md
+new file mode 100644
+index 0000000..656bda0
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.md
+@@ -0,0 +1,15 @@
++# Agent Note: Sidebar Browser extension bridge
++
++English | [中文](2026-10-08-sidebar-browser-bridge.zh.md)
++
++## Decision
++
++The official Browser renderer owns tab navigation and presentation. `ctx.sidebarBrowser` provides Session/tab-scoped access to its mounted controllers and optional iframe message leases, so an extension consumer can reuse that renderer instead of maintaining another browser panel. This supplements the [Sidebar Browser decision](2026-09-16-sidebar-browser.md); its navigation and persistence decisions remain active.
++
++## Ownership
++
++The service does not read website content, register tools, or grant extension authorization. The consumer verifies the selected Session and tab, obtains extension authorization, records results through its tool pipeline, and handles cancellation. A physical iframe lease expires on replacement, detachment, or hiding. Desktop navigation remains available without an iframe lease. Controller registration is withdrawn during plugin disposal; stale release calls cannot withdraw a replacement registration.
++
++## Validation
++
++Package tests cover Session isolation, official persistence writes, invalid addresses, replaced and hidden leases, registration disposal, and existing Web/Desktop navigation. The downstream consumer additionally checks archive migration and authenticated extension operations on synthetic cross-origin pages.
+diff --git a/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.zh.md b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.zh.md
+new file mode 100644
+index 0000000..489b2e7
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.zh.md
+@@ -0,0 +1,15 @@
++# Agent Note：Sidebar Browser 扩展桥接
++
++[English](2026-10-08-sidebar-browser-bridge.md) | 中文
++
++## 决定
++
++官方 Browser 渲染器拥有标签导航与页面呈现。`ctx.sidebarBrowser` 按 Session 和标签提供已挂载 Controller 及可选 iframe 消息租约，让扩展调用方复用官方界面。此记录补充[Sidebar Browser 决定](2026-09-16-sidebar-browser.zh.md)，原有导航与持久化决定继续有效。
++
++## 归属
++
++服务不读取网页、注册工具或授予扩展权限。调用方核对当前 Session 与标签、完成扩展授权、通过工具管线记录结果并处理取消。iframe 替换、卸载或隐藏后，原物理租约失效。Desktop 可继续导航，但不提供 iframe 租约。插件卸载撤回 Controller 注册；旧释放回调不会撤回新的注册。
++
++## 验证
++
++包测试覆盖 Session 隔离、官方持久化写入、非法地址、替换与隐藏后的租约失效、注册释放以及已有 Web/Desktop 导航。调用插件另外验证旧存档迁移和跨域合成网页上的扩展操作。
+diff --git a/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.i18n.yaml b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.i18n.yaml
+new file mode 100644
+index 0000000..fdb7c67
+--- /dev/null
++++ b/.agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.i18n.yaml
+@@ -0,0 +1,16 @@
++# Bilingual-pair consistency record for 2026-10-08-sidebar-browser-bridge.md (docs/i18n/README.md): per heading
++# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
++# After editing either side, bring the other along and re-record with:
++#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-08-sidebar-browser-bridge.md
++/agent-note-sidebar-browser-extension-bridge:
++  en: 7b1b800ee7e643d3
++  zh: f76de72a70312d16
++/agent-note-sidebar-browser-extension-bridge/decision:
++  en: 74027cdf73ff152d
++  zh: 27162fe782c31982
++/agent-note-sidebar-browser-extension-bridge/ownership:
++  en: df32c06d27bf9e20
++  zh: 5ef339a96f3eae34
++/agent-note-sidebar-browser-extension-bridge/validation:
++  en: 5ccbdd2fa1041228
++  zh: acc108ff9b75d6a6

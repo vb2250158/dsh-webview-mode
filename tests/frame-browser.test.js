@@ -17,7 +17,7 @@ try {
 const extensionPath = fileURLToPath(new URL('../extension/', import.meta.url))
 const client = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 const start = client.indexOf('    function extensionRequest(')
-const end = client.indexOf('    function Panel(', start)
+const end = client.indexOf('    let connectionTimeoutMs', start)
 assert.ok(start >= 0 && end > start, 'Expected the two current client bridge helpers')
 const helpers = client.slice(start, end)
 
@@ -52,7 +52,7 @@ test('real extension commands operate only the bound visible iframe document', {
     finally { await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) }
   })
   context = await chromium.launchPersistentContext(profile, {
-    headless: false,
+    headless: true,
     ...(process.env.DSH_EXTENSION_BROWSER_EXECUTABLE ? { executablePath: process.env.DSH_EXTENSION_BROWSER_EXECUTABLE } : {}),
     args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     timeout: 30000,
@@ -69,7 +69,8 @@ test('real extension commands operate only the bound visible iframe document', {
   const command = action => page.evaluate(async action => {
     const nonce = crypto.randomUUID(), deadline = Date.now() + 10000
     await extensionRequest({ kind: 'prepare-frame', nonce, deadline }, deadline)
-    await bindFrame(document.querySelector('iframe'), nonce, deadline)
+    const element = document.querySelector('iframe')
+    await bindFrame({ source: element.contentWindow, send: value => element.contentWindow.postMessage(value, '*') }, nonce, deadline)
     const result = await extensionRequest({ kind: 'frame-command', nonce, deadline, action }, deadline)
     if (result.error) throw new Error(result.error)
     return result.value

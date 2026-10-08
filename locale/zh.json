@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "浏览器侧栏",
-    "description": "为每个会话提供独立的浏览器侧栏。"
+    "title": "浏览器操作桥接",
+    "description": "复用官方浏览器侧栏，让 Agent 操作当前网页。"
   }
 }

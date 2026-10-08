@@ -1,8 +1,8 @@
 {
   "name": "dsh-webview-mode",
-  "version": "0.2.13",
+  "version": "0.3.0",
   "type": "module",
-  "description": "Per-conversation browser side panel for DSH",
+  "description": "Agent bridge for the official DSH Sidebar Browser",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
@@ -25,7 +25,9 @@
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-session",
-        "@deepseek-ai/dsh-client-ui-plugin-manager"
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-sidebar-browser"
       ]
     }
   },
@@ -55,7 +57,8 @@
     "docs",
     "locale",
     "icon.svg",
-    "ICON_LICENSE.txt"
+    "ICON_LICENSE.txt",
+    "patches"
   ],
   "peerDependencies": {
     "@deepseek-ai/schemastery": ">=3.18.5-alpha.1 <4.0.0",
@@ -63,7 +66,9 @@
     "@deepseek-ai/dsh-api-session-controller": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.1-alpha.1 <0.3.0",
     "@deepseek-ai/dsh-client-ui-session": ">=0.2.1-alpha.1 <0.3.0",
-    "@deepseek-ai/dsh-client-ui-plugin-manager": ">=0.2.1-alpha.1 <0.3.0"
+    "@deepseek-ai/dsh-client-ui-plugin-manager": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": ">=0.2.1-alpha.1 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-sidebar-browser": ">=0.2.1-alpha.1 <0.3.0"
   },
   "icon": "./icon.svg"
 }

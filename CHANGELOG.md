@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 (2026-10-08)
+
+- 浏览界面、标签、布局和聊天链接交给官方 Sidebar Browser，只保留 Agent 操作桥接。
+- 旧标签逐项迁移，原存档保留；迁移记录失败时撤回刚创建的标签。
+- Requires the included Sidebar Browser bridge patch. Companion extension remains 0.2.3.
+
 ## 0.2.13 (2026-10-07)
 
 - 缩小图标绘制内容约三分之一，增加方框内的留白。

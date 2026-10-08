@@ -1,95 +1,29 @@
-# DSH WebView Mode
+# DSH 浏览器操作桥接
 
-This release requires DSH 0.2.1-alpha.1 or a compatible 0.2 release. See [compatibility details](docs/dsh-0.2-compatibility.md).
+0.3.0 复用官方 `@deepseek-ai/dsh-client-ui-sidebar-browser`。标签、地址栏、前进后退、刷新、布局和聊天链接由官方管理；本插件提供 `conversation_browser`，让 Agent 操作同一个可见 iframe。
 
-独立插件，在当前对话中嵌入真实 iframe 网页并保留聊天区域。不创建独立自动化浏览器，不修改官方源码。插件版本为 0.2.8，配套扩展版本为 0.2.3；源码、已安装插件、运行中的 Host 和浏览器扩展版本需要分别核对。
+## 安装条件
 
-## 使用与页面状态
+需要 DSH 0.2.1-alpha.1、启用的官方 Sidebar Browser 和 `ctx.sidebarBrowser` 接口。当前官方版本没有此接口；源码运行环境须应用包内 `patches/sidebar-browser-bridge.patch` 并重建 Client 包。补丁不替换官方 UI。bundle 自动启用 `ui-sidebar-browser`。Desktop 可继续手动浏览，DOM 桥接只支持 Web iframe。
 
-在地址栏输入不含账号密码的完整 HTTP(S) 地址，或普通点击聊天中的外部 HTTP(S) 链接，在当前对话新增或复用相同完整 URL 的标签。修改键、中键、下载、内部链接保留原生行为。工具栏「在 Chrome 打开」是明确的外部入口。
+配套 Chrome 扩展仍为 0.2.3。在插件详情页查看安装目录，加载扩展并授权当前 DSH 来源。此次仅修改插件，扩展无需重新加载；Host 更新后刷新 DSH 页面。
 
-标签切换、隐藏面板和切换对话保留已挂载 iframe。刷新仅重载当前标签；关闭标签销毁对应 iframe。隐藏网页仍可能运行脚本、播放声音并占用内存。刷新 DSH 或卸载插件后只恢复存档，不恢复表单、滚动和浏览历史。
+## 旧标签迁移
 
-每个对话的标签、当前标签、面板展开状态通过 ArchiveStore 保存，带版本冲突检查。地址与标题可能来自地址栏或扩展元数据，是存档而不是实时加载证明。网页内容和标题是不可信数据。
+首次打开会话时，按旧标签 ID 逐项复制到官方侧栏。每项创建成功后保存当前浏览器的迁移记录；记录写入失败则关闭刚创建的标签，保留原存档。重复访问不再次导入，已关闭的标签不自动重建。旧 `tabId` 通过迁移记录映射到官方 ID。不同浏览器分别迁移。
 
-桌面分隔线可拖动，比例限制 20%–80%，按会话保存在当前浏览器 localStorage；方向键微调，Home 或双击恢复 60:40。窄屏使用上下布局。界面颜色沿用 DSH 主题。
+旧 ArchiveStore 文件保留在原目录，仅作为迁移源。新标签由官方 Sidebar 的浏览器本地存储保存，刷新后遵循官方显式恢复规则；不恢复表单、滚动或页面内存。
 
-## Agent 接口
+## Agent 操作
 
-`conversation_browser` 操作当前对话的内置 iframe：
+`conversation_browser` 保留 `status`、`new`、`navigate`、`select`、`close`、`reload`、`snapshot`、`click`、`text`、`choose`、`scroll`。先检查 `status`，再对可见当前标签取 `snapshot`，使用最新 `snapshotId` 和元素 `ref` 操作，之后重新读取验证。导航信息不是加载成功证明。
 
-| action | 参数 | 结果与限制 |
-| --- | --- | --- |
-| `status` | 无 | 返回存档标签、选中标签、可见性以及扩展握手状态/版本/能力；不展开面板、不读取页面、不证明目标 iframe 可访问。 |
-| `navigate` | `url` | 当前标签提交导航请求；无标签时新建，不证明加载成功。 |
-| `new` | 可选 `url` | 新建插件标签。 |
-| `select` / `close` | `tabId` | 选择或关闭插件标签；close 缺省为当前标签。 |
-| `reload` | 无 | 只重载当前标签，保留后台页面。 |
-| `snapshot` | 可选 `tabId` | 读取选中且可见的文档，返回 `snapshotId`、文本与元素 `ref`。 |
-| `click` | `snapshotId`, `ref` | 点击快照中的元素。 |
-| `text` | `snapshotId`, `ref`, `text` | 替换受支持编辑控件的文本。 |
-| `choose` | `snapshotId`, `ref`, `value` | 按原生 select 的选项 value 选择。 |
-| `scroll` | `snapshotId`, `deltaY`, 可选 `ref` | 滚动页面或对应容器，单次绝对值不超过 10000。 |
+DOM 操作只接受屏幕中所属会话的当前可见官方 iframe，后台标签须先 `select`。扩展按 Chrome 的 tabId/frameId/documentId 校验身份。密码和文件控件排除，不读取 Cookie、浏览器存储或文件，不提供任意 JavaScript。快照最多 200 个元素和 24000 字符；普通表单值可能进入会话日志，仅在任务需要时读取。
 
-先 `status` 检查桥接，再 `snapshot` 定位，操作后重新 `snapshot` 验证。旧 snapshotId、文档导航、目标语义变化、不可见/禁用/遮挡元素均拒绝操作。不能指定后台标签执行 DOM 动作，需先 select。页面动作不会自动重试；取消或超时可能发生在实际动作之后，结果不确定时先检查。
+DOM 动作使用合成事件，不支持 Canvas、嵌套框架、关闭的 Shadow DOM 或可信物理键鼠。取消和超时可能发生在动作之后，不自动重试。网站嵌入和第三方登录限制遵循官方浏览器及 Chrome 策略。
 
-快照最多 200 个元素、完整序列化结果最多 24000 字符，不是截图。包含普通关联标签、输入类型、文本/search/email/url/tel 输入框与 textarea 当前值、勾选/选择状态、受限 HTTP(S) 链接地址。普通表单也可能含个人信息，会随工具结果进入会话日志；仅在任务需要时读取。密码和文件控件完全排除，不读取 Cookie、浏览器存储或文件。不提供任意 JavaScript 执行。
+## 验证与发布
 
-DOM 动作使用合成事件；不支持 Canvas、嵌套框架、关闭的 Shadow DOM 或要求可信物理键鼠的页面。网页脚本可以改变自身行为，目标身份检查不能保证任意网站的业务执行结果。
+`pnpm test` 验证迁移、官方导航、会话隔离和扩展操作。`DSH_DOM_TEST_RESOLVE_FROM` 指定已有 jsdom/Playwright 工作区 package.json；`DSH_EXTENSION_BROWSER_EXECUTABLE` 指定已有 Chromium，不自动下载。真实扩展测试使用临时 profile 与合成网页。
 
-## 配套扩展与连接
-
-基础 iframe 浏览无需扩展；Agent 页面读取/操作、页面元数据及用户新标签链接转发需要配套扩展 **0.2.3**。通过插件 `webviewArchive.setup` 返回安装内的 extensionDirectory，在 Chrome 扩展管理页以开发者模式加载该目录。升级后重新加载扩展，并刷新 DSH。
-
-### 升级扩展后是两个动作，不是两个选择
-
-扩展是**注入到页面里**运行的。重新加载扩展会让已经打开的 DSH 页面里那份旧脚本立刻失效——它的 `chrome.runtime` 句柄随着旧扩展一起作废，此后任何 `chrome.*` 调用都会抛 `Extension context invalidated`。**这个异常在页面内部无法恢复**，只能靠刷新页面重新注入。
-
-因此升级配套扩展必须按顺序做完两步，缺一不可：
-
-1. 在 `chrome://extensions` 里**重新加载扩展**——让 Chrome 读到磁盘上的新 `manifest.json`（Chrome 只在加载那一刻读它）。
-2. **刷新所有已打开的 DSH 页面**——重载扩展这一步必然让它们变成上文的孤儿脚本。
-
-只做第 1 步，扩展本身已经完全正确，面板却仍会抛 `Extension context invalidated`，看起来像"重载没生效"。**它是状态问题，不是版本问题**——对照下表区分：
-
-| 现象 | 含义 | 动作 |
-| --- | --- | --- |
-| 面板报 `Extension context invalidated` | 扩展已重载，但**页面里的旧脚本已失效**（0.2.2 及更早才会这样报） | **刷新页面**（F5） |
-| 面板报 `扩展为 0.2.1，需要 0.2.3` | Chrome 加载的是**旧 manifest** | **在 `chrome://extensions` 重载扩展** |
-| 面板报 `扩展已重新加载，本页脚本已失效` | 重载时本页脚本已死，**扩展本身是对的** | **刷新本页** |
-
-从扩展 **0.2.3** 起，第二种情况不再抛出原始异常：桥接脚本先检测 `chrome.runtime?.id` 是否还在，失效就返回一句可读的说明，设置面板据此直接告诉你「刷新本页」。所以旧版看到的那个红错，在 0.2.3 上会变成一条明确指引。**注意**：这里靠 `chrome.runtime` 自身判定，不能靠 `chrome.storage.onChanged` —— 上下文失效后 storage 事件也收不到，监听器形同虚设。
-
-扩展选项中填写当前 DSH 页面的精确 HTTP(S) 来源（协议、主机、端口），默认不信任任何来源。最多 20 项；留空保存撤销全部授权，旧连接和引用失效。配置地址属于本机，不在插件中硬编码。此授权允许受信任 DSH 读取并操作其内嵌页面；扩展需要 HTTP(S) 内容脚本、storage 和 webNavigation 权限，不使用 debugger。
-
-设置面板的「浏览器」一节按顺序显示三步：复制 `chrome://extensions` 到 Chrome 地址栏并打开开发者模式；复制插件目录并「加载已解压的扩展程序」（已安装则重新加载）；在扩展卡片的「详情」→「扩展程序选项」中粘贴当前 DSH 来源、保存并刷新 DSH。每步只保留对应的复制按钮，地址和路径也可直接选中。扩展握手状态仍在步骤上方；刷新页面后重新检测连接。浏览器不允许网页打开 `chrome://` 地址，因此第一步必须由用户复制到地址栏。扩展仍允许未授权来源打开选项页用于首次授权；该动作不读取页面、标签或存档，且只接受当前顶层 DSH 文档，其余未授权请求仍被拒绝。
-
-状态行先比对版本、再判断授权：过旧的配套扩展会以 `configured: false` 回应，若先判断授权，面板会把「扩展该重新加载」误报成「来源尚未授权」。无法握手时，设置页提示按步骤检查并刷新页面，不显示操作请求共用的超时原文。复制优先用 Clipboard API，在非安全上下文（如纯 HTTP 的 3081 网关）回退到临时输入框，因此局域网地址下同样可用。
-
-`status` 的 connected 表示受信顶层 DSH 与扩展成功握手，不代表目标 iframe 连接。unconfigured 表示扩展存在但来源未授权；incompatible 表示协议不匹配；unavailable 表示未收到有效响应或发生连接错误，不能仅凭超时判断未安装。握手同时返回扩展 id，仅用于在设置面板里拼出 `chrome://extensions` 深链接；握手不可用时回退到不带 id 的扩展管理页地址。Host 配置 `connectionTimeoutMs`（500–4000，默认 3000）控制握手等待，`commandTimeoutMs`（5000–120000，默认 45000）控制命令期限，`dataDirectory` 控制存档目录。
-
-## 页面事件与安全限制
-
-页面读取和操作按 Chrome 的 tabId/frameId/documentId 绑定到当前 iframe。链接与元数据通过隔离内容脚本、worker 的文档验证、顶层扩展桥接传递，不接受网页脚本直接发出的旧 dsh-iframe-link/location 消息。实际 URL 由 Chrome 文档记录确认，标题仍是网页数据。
-
-只转发已绑定直接子框架中可信用户手势触发的 HTTP(S) 新窗口链接，包括 target=_blank、命名目标及 Ctrl/Command/中键。未绑定或失去连接时不接管。脚本 window.open 的 MAIN world 接管已退役，因为网页脚本消息无法证明用户操作；不模拟 WindowProxy，也不处理表单 POST 弹窗。iframe 不授予 allow-popups，未接管弹窗由浏览器限制。
-
-网站 CSP frame-ancestors / X-Frame-Options 可能禁止内嵌，登录受第三方 Cookie 策略限制。插件不移除安全头，不代理绕过限制，不把 load 事件当成功证明。初始地址禁止 DSH 自身来源，但后续重定向的同源隔离依赖 DSH 响应的嵌入保护；不能将这个 iframe 方案当作隔离恶意站点的独立浏览器沙箱。
-
-## 安装与验证
-
-使用官方入口 `dsh plugin --profile web add --save-exact github:vb2250158/dsh-webview-mode#<完整提交号>`。发布和安装是独立步骤；新源码未发布时不能声称当前 GUI 已更新。安装后需要 Host 重载或受管重启，并刷新现有 DSH 页面与重新加载扩展。
-
-`pnpm test` 执行 Node 回归用例。DOM 测试需要现有 jsdom，真实扩展测试需要现有 Playwright 与 Chromium；可将 `DSH_DOM_TEST_RESOLVE_FROM` 指向拥有对应依赖的 package.json，分别运行 `node --test tests/frame-dom.test.js` 和 `node --test tests/frame-browser.test.js`。缺依赖明确跳过，不自动下载。`DSH_EXTENSION_BROWSER_EXECUTABLE` 可指定已有测试浏览器。
-
-真实扩展测试使用独立临时 profile 和两个临时 HTTP 来源，验证相同的生产 sandbox 属性下，读取/填写/点击操作同一跨域 iframe，标签数不增，导航后的旧引用和未授权来源被拒绝。测试浏览器与 fixture 在结束时清理。该测试不是当前用户 GUI 或具体业务网站的验收。
-
-## Plugin display metadata
-
-The plugin list shows **Browser side panel** in English and **浏览器侧栏** in Chinese, following the DSH interface language. `locale/en.json` and `locale/zh.json` provide the title and description; `icon.svg` supplies self-contained artwork. The package exports and publishes these resources. The icon is adapted from Lucide; see [ICON_LICENSE.txt](ICON_LICENSE.txt).
-
-## 插件设置入口
-
-在插件列表中点击本插件进入详情页，即可使用原有配置和操作界面；设置菜单不再重复显示该插件入口。
-
-The icon uses a centered 36 × 36 viewBox to leave more space around the artwork inside the plugin icon frame.
+按既有环境同步流程安装固定 Git 提交，分别核对安装、Host 重启和页面刷新。兼容补丁仅包含 Sidebar Browser 的改动。设计与回滚说明见 [整合记录](docs/sidebar-consolidation.md)。

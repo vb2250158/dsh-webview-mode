@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Browser side panel",
-    "description": "Provide a separate browser side panel for each conversation."
+    "title": "Browser operation bridge",
+    "description": "Let agents operate pages in the official Sidebar Browser."
   }
 }
