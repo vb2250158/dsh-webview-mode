@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.6 (2026-10-20)
+
+- 仅在官方侧栏显示所属会话时迁移旧标签和读取操作队列。全局面板暂缓迁移；切换离开时保留原存档，返回后继续。
+- Defer archived-tab migration and queued browser jobs until the official Sidebar displays their Session. Preserve the archive when navigation interrupts a read, and keep genuine migration failures visible.
+
 ## 0.3.3 (2026-10-08)
 
 - 官方侧栏通过 bundle 和 Client 注入声明加载，移除没有直接模块导入的额外 npm peer 声明。

@@ -7,18 +7,22 @@ import { webcrypto } from 'node:crypto'
 async function harness(savedTabs = [], storageFailure = false, url = 'https://dsh.test') {
   let factory
   const listeners = new Map()
+  const mountedListeners = new Set(), intervals = new Set(), errors = []
+  let effect
   const window = { __ModuleLoader__: { load(entry) { factory = entry.factory } },
     addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) }
   const context = { window, URL, location: new URL(url), crypto: webcrypto,
-    setTimeout, clearTimeout, setInterval, clearInterval, console }
+    setTimeout, clearTimeout, setInterval: callback => { intervals.add(callback); return callback },
+    clearInterval: callback => intervals.delete(callback), console: { ...console, error: (...args) => errors.push(args) } }
   const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
     .replace('function createSidebarAdapter(', 'globalThis.TestAdapter = function createSidebarAdapter(')
+    .replace('function Bridge(', 'globalThis.TestBridge = function Bridge(')
   runInNewContext(source, context)
-  factory(() => ({ createElement() {} }))
-  let session = 's', active, expanded = false, sequence = 0, reads = 0
+  factory(() => ({ createElement() {}, useEffect(callback) { effect = callback } }))
+  let session = 's', active, expanded = false, sequence = 0, reads = 0, nextReads = 0
   const records = [], actions = [], markers = new Map()
   const sidebar = {
-    mounted: { getSnapshot: () => session }, tabsIn: () => records,
+    mounted: { getSnapshot: () => session, subscribe(callback) { mountedListeners.add(callback); return () => mountedListeners.delete(callback) } }, tabsIn: () => records,
     active: () => records.find(tab => tab.id === active), isExpanded: () => expanded,
     toggleExpanded() { expanded = !expanded },
     openTab(kind, options) { const tab = { id: `tab-${++sequence}`, kind, title: options.params.url || 'Browser' }; records.push(tab); active = tab.id; expanded = true; actions.push(['open', options.params.url]) },
@@ -31,12 +35,77 @@ async function harness(savedTabs = [], storageFailure = false, url = 'https://ds
     reload: (sid, id) => actions.push(['reload', sid, id]), messageTarget: () => undefined,
   }
   const saved = { version: 1, sessionId: 's', open: false, revision: 9, active: savedTabs[0]?.id || null, tabs: savedTabs }
-  const service = { read: async () => { reads++; return { ok: true, value: saved } }, next: async () => ({ ok: true, value: { active: true } }) }
+  const service = { read: async () => { reads++; return { ok: true, value: saved } }, next: async request => { nextReads++; return { ok: true, value: request.token ? { active: true } : null } } }
   const storage = { getItem: key => markers.get(key) ?? null, setItem(key, value) { if (storageFailure) throw new Error('Storage failed'); markers.set(key, value) } }
   const adapter = context.TestAdapter(sidebar, browser, service, storage)
   const command = action => adapter.command('s', { action, token: 'test', expiresAt: Date.now() + 1000 })
-  return { adapter, command, saved, records, actions, markers, listeners, get reads() { return reads }, setSession(value) { session = value }, sidebar, browser }
+  return { adapter, command, saved, records, actions, markers, listeners, service, errors, mountedListeners, intervals,
+    get reads() { return reads }, get nextReads() { return nextReads },
+    setSession(value) { session = value; for (const notify of mountedListeners) notify() }, sidebar, browser,
+    mountBridge() { context.TestBridge({ sessionId: 's', service, adapter, mounted: sidebar.mounted }); return effect() },
+    async tick() { await Promise.all([...intervals].map(callback => callback())); await new Promise(resolve => setImmediate(resolve)) },
+  }
 }
+
+test('a global panel defers archived tabs and browser jobs until its Session is displayed', async () => {
+  const h = await harness([{ id: 'old', url: 'https://a.test/', title: 'A' }])
+  h.setSession(null)
+  const stop = h.mountBridge()
+  try {
+    await h.tick()
+    assert.equal(h.reads, 0)
+    assert.equal(h.nextReads, 0)
+    h.setSession('s')
+    await h.tick()
+    assert.equal(h.reads, 1)
+    assert.equal(h.records.length, 1)
+    const claimed = h.nextReads
+    h.setSession(null)
+    await h.tick()
+    assert.equal(h.nextReads, claimed)
+    h.setSession('s')
+    await h.tick()
+    assert.equal(h.reads, 1)
+    assert.equal(h.records.length, 1)
+    assert.deepEqual(h.errors, [])
+  } finally { stop(); h.adapter.dispose() }
+  assert.equal(h.mountedListeners.size, 0)
+  assert.equal(h.intervals.size, 0)
+})
+
+test('leaving during an archive read preserves migration for the next visible mount', async () => {
+  const h = await harness([{ id: 'old', url: 'https://a.test/', title: 'A' }])
+  const read = h.service.read
+  let finish
+  h.service.read = () => new Promise(resolve => { finish = resolve })
+  const stop = h.mountBridge()
+  try {
+    h.setSession('other')
+    finish(await read())
+    await h.tick()
+    assert.equal(h.records.length, 0)
+    assert.equal(h.markers.size, 0)
+    assert.deepEqual(h.errors, [])
+    h.service.read = read
+    h.setSession('s')
+    await h.tick()
+    assert.equal(h.records.length, 1)
+    assert.equal(h.saved.revision, 9)
+  } finally { stop(); h.adapter.dispose() }
+})
+
+test('an on-screen migration failure remains visible and is not retried by every poll', async () => {
+  const h = await harness([{ id: 'old', url: 'https://a.test/', title: 'A' }], true)
+  const stop = h.mountBridge()
+  try {
+    await h.tick()
+    await h.tick()
+    assert.equal(h.errors.length, 1)
+    assert.equal(h.errors[0][1], 'Storage failed')
+    assert.equal(h.records.length, 0)
+    assert.equal(h.saved.tabs.length, 1)
+  } finally { stop(); h.adapter.dispose() }
+})
 
 test('Desktop navigation and status do not probe Chrome; DOM commands report the missing public guest API', async () => {
   const h = await harness([], false, 'dsh-app://app/')
