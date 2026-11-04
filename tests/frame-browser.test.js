@@ -17,7 +17,7 @@ try {
 const extensionPath = fileURLToPath(new URL('../extension/', import.meta.url))
 const client = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 const start = client.indexOf('    function extensionRequest(')
-const end = client.indexOf('    let connectionTimeoutMs', start)
+const end = client.indexOf('    /** Official Sidebar owns', start)
 assert.ok(start >= 0 && end > start, 'Expected the two current client bridge helpers')
 const helpers = client.slice(start, end)
 

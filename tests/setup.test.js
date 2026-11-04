@@ -40,11 +40,9 @@ test('the settings section guides installation in three steps and reports the ha
   }
   const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
     .replace('function Setup(', 'globalThis.TestSetup = function Setup(')
-    .replace('let connectionTimeoutMs', 'let connectionTimeoutMs = 20')
-    .replace('let extensionDirectory', "let extensionDirectory = 'C:/ext'")
   runInNewContext(source, context)
   factory(name => name === 'react' ? React : {})
-  const render = () => { cursor = 0; return context.TestSetup() }
+  const render = () => { cursor = 0; return context.TestSetup({ readSetup: async () => ({ connectionTimeoutMs: 20, extensionDirectory: 'C:/ext' }) }) }
   const find = (node, predicate) => {
     if (!node || typeof node !== 'object') return undefined
     if (predicate(node)) return node
@@ -125,11 +123,9 @@ test('the settings section asks for a page refresh when the extension was reload
   }
   const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
     .replace('function Setup(', 'globalThis.TestSetup = function Setup(')
-    .replace('let connectionTimeoutMs', 'let connectionTimeoutMs = 20')
-    .replace('let extensionDirectory', "let extensionDirectory = 'C:/ext'")
   runInNewContext(source, context)
   factory(name => name === 'react' ? React : {})
-  const render = () => { cursor = 0; return context.TestSetup() }
+  const render = () => { cursor = 0; return context.TestSetup({ readSetup: async () => ({ connectionTimeoutMs: 20, extensionDirectory: 'C:/ext' }) }) }
   const find = (node, predicate) => {
     if (!node || typeof node !== 'object') return undefined
     if (predicate(node)) return node

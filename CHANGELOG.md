@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.7 (2026-11-04)
+
+- 浏览器连接配置改为设置页或 Web 状态查询首次需要时读取，不再阻塞插件激活。仅合并并发读取，连接重置及卸载后的旧结果失效；不改变会话迁移、任务领取和完成生命周期。
+- Read actual browser connection configuration on demand without blocking client activation. Share only in-flight reads and retire old results after connection reset or unload; preserve archive migration and browser job ownership.
+
 ## 0.3.6 (2026-10-20)
 
 - 仅在官方侧栏显示所属会话时迁移旧标签和读取操作队列。全局面板暂缓迁移；切换离开时保留原存档，返回后继续。

@@ -11,7 +11,7 @@ async function harness(savedTabs = [], storageFailure = false, url = 'https://ds
   let effect
   const window = { __ModuleLoader__: { load(entry) { factory = entry.factory } },
     addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) }
-  const context = { window, URL, location: new URL(url), crypto: webcrypto,
+  const context = { window, URL, AbortController, location: new URL(url), crypto: webcrypto,
     setTimeout, clearTimeout, setInterval: callback => { intervals.add(callback); return callback },
     clearInterval: callback => intervals.delete(callback), console: { ...console, error: (...args) => errors.push(args) } }
   const source = (await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'))
@@ -37,7 +37,7 @@ async function harness(savedTabs = [], storageFailure = false, url = 'https://ds
   const saved = { version: 1, sessionId: 's', open: false, revision: 9, active: savedTabs[0]?.id || null, tabs: savedTabs }
   const service = { read: async () => { reads++; return { ok: true, value: saved } }, next: async request => { nextReads++; return { ok: true, value: request.token ? { active: true } : null } } }
   const storage = { getItem: key => markers.get(key) ?? null, setItem(key, value) { if (storageFailure) throw new Error('Storage failed'); markers.set(key, value) } }
-  const adapter = context.TestAdapter(sidebar, browser, service, storage)
+  const adapter = context.TestAdapter(sidebar, browser, service, async () => ({ connectionTimeoutMs: 20, extensionDirectory: 'C:/ext' }), storage)
   const command = action => adapter.command('s', { action, token: 'test', expiresAt: Date.now() + 1000 })
   return { adapter, command, saved, records, actions, markers, listeners, service, errors, mountedListeners, intervals,
     get reads() { return reads }, get nextReads() { return nextReads },
